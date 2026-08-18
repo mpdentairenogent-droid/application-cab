@@ -19,11 +19,12 @@ Pour le détail complet de la demande initiale : `docs/CAHIER_DES_CHARGES.md`. P
 **Infrastructure** :
 - Supabase : projet `wkallvenuvgtjfubhutz` (région eu-west-1). Migrations SQL appliquées jusqu'à `0028`.
 - Dépôt Git initialisé et poussé sur GitHub le 2026-08-18 : `https://github.com/mpdentairenogent-droid/application-cab.git`, branche `main`. Identité git configurée localement dans le dépôt (pas globalement) : `mpdentairenogent` / `mpdentaire.nogent@gmail.com`.
-- Projet EAS lié : `@mpkamcams-team/cabinet-dentaire-app`. **Le premier build Android de production a échoué deux fois** — la première fois à cause d'un `package-lock.json` désynchronisé (corrigé), la deuxième fois pour une cause encore non diagnostiquée au moment de la rédaction de ce fichier (le jeton d'accès Expo utilisé en session a expiré avant d'avoir pu creuser). À reprendre : voir "Prochaines étapes".
+- Projet EAS lié : `@mpkamcams-team/cabinet-dentaire-app`. **Build Android de production réussi** (version code 3, build `d957c742`, terminé le 10/08/2026, artefact `.aab` disponible sur EAS). Un essai précédent (version code 2, build `d161fdb3`) avait échoué sur `npm ci --include=dev exited with non-zero code: 1` — même piège que le `package-lock.json` désynchronisé documenté plus bas, pas une cause mystère — corrigé en régénérant le lock file avant de resoumettre.
 
 ## Décisions prises en cours de route (pas dans le cahier des charges ni l'architecture)
 
 - **Distribution mobile** : préférence pour les canaux internes/fermés (test interne Play Store, distribution ad hoc iOS) plutôt qu'une fiche publique complète sur les stores — l'app gère des données sensibles du cabinet et n'a aucune raison d'être cherchable publiquement. Compte Google Play Console en cours de création par l'utilisateur (statut à vérifier). Côté Apple, la question est explicitement mise en pause ("on verra") tant qu'Android n'est pas réglé.
+- **Dépôt GitHub passé de privé à public le 18/08/2026** (décision utilisateur, pour simplifier l'accès aux outils de dev). Vérifié à cette occasion : aucun secret réel n'a jamais été committé (seulement des placeholders dans `.env.example`) — cohérent avec la préférence de ne rien exposer publiquement, mais à garder en tête si de la doc future mentionne des infos internes (le fichier courant cite déjà l'e-mail du praticien et l'id du projet Supabase).
 - **IA** : utilisée uniquement pour de l'extraction/OCR assistée à partir d'une photo, jamais pour de la génération autonome de données métier. Toujours côté serveur (Supabase Edge Functions), la clé Anthropic n'est jamais exposée côté client. Modèle utilisé : Haiku 4.5, choisi pour le rapport coût/tâche (extraction bornée), pas Sonnet/Opus. Un plafond de dépense mensuel a été recommandé côté compte Anthropic (Réglages > Facturation), avec rechargement automatique désactivé pour un vrai plafond dur.
 - **Détection de doublons** (import stock, saisie d'articles) : comparaison de texte floue (accents/casse/espaces, distance de Levenshtein), délibérément sans IA — plus simple, gratuit, et les données ne quittent pas l'appareil pour cette vérification.
 - **RGPD / IA** : cohérent avec la contrainte déjà actée de ne jamais stocker de dossier médical patient nominatif — l'IA ne traite que des documents administratifs (factures, étiquettes de cycle), jamais de données patient.
@@ -40,8 +41,7 @@ Pour le détail complet de la demande initiale : `docs/CAHIER_DES_CHARGES.md`. P
 
 ## En attente / pas finalisé
 
-- **Build Android de production** : bloqué sur un deuxième échec non diagnostiqué (voir plus haut).
-- **Publication Play Store** : compte Google Play Console en cours de création côté utilisateur, statut à confirmer. Politique de confidentialité pas encore rédigée (nécessaire même en test interne, l'app touchant des données personnelles).
+- **Publication Play Store** : l'artefact `.aab` de production existe déjà (build `d957c742`, voir Infrastructure) et n'a pas encore été soumis. Compte Google Play Console en cours de création côté utilisateur, statut à confirmer. Politique de confidentialité pas encore rédigée (nécessaire même en test interne, l'app touchant des données personnelles).
 - **Distribution iOS** : entièrement en pause, décision explicitement reportée par l'utilisateur.
 - **3ᵉ cas d'usage IA (bons de livraison / articles de commande)** : prévu, pas commencé. Réutiliser le module partagé `supabase/functions/_shared/claudeVision.ts` plutôt que repartir de zéro.
 - **Réglages du cabinet** (`app_settings` : nom, adresse, téléphone, email) : aucun écran dans l'app pour les modifier — toujours la valeur par défaut du seed initial.
@@ -52,7 +52,6 @@ Pour le détail complet de la demande initiale : `docs/CAHIER_DES_CHARGES.md`. P
 
 ## Prochaines étapes prévues
 
-1. Obtenir un nouveau jeton d'accès Expo (le précédent a expiré) pour reprendre l'investigation du build Android qui échoue.
-2. Vérifier l'état du compte Google Play Console (vérification d'identité en cours au dernier point de contact).
-3. Rédiger la politique de confidentialité une fois prêt à soumettre sur Play Store.
-4. Une fois le scan de facture validé par un usage réel sur plusieurs jours, attaquer le 3ᵉ cas d'usage IA (bons de livraison).
+1. Vérifier l'état du compte Google Play Console (vérification d'identité en cours au dernier point de contact).
+2. Rédiger la politique de confidentialité, puis soumettre l'artefact `.aab` déjà produit (build `d957c742`) en test interne Play Store.
+3. Une fois le scan de facture validé par un usage réel sur plusieurs jours, attaquer le 3ᵉ cas d'usage IA (bons de livraison).
