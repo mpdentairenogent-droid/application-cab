@@ -58,6 +58,7 @@ function translateAuthError(message: string): string {
   if (message.includes('Email not confirmed')) return "Ce compte n'a pas encore été confirmé.";
   if (message.includes('User already registered')) return 'Un compte existe déjà avec cet email.';
   if (message.includes('Password should be at least')) return 'Le mot de passe doit faire au moins 8 caractères.';
+  if (message.includes('email rate limit exceeded')) return "Trop d'emails envoyés récemment (limite du plan gratuit Supabase). Réessaie dans un moment.";
   return 'Une erreur est survenue. Réessaie dans un instant.';
 }
 
@@ -116,6 +117,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
     });
     setIsSigningIn(false);
+    if (error) console.error('[signUp]', error.status, error.message);
     return {
       error: error ? translateAuthError(error.message) : null,
       needsEmailConfirmation: !error && !data.session,
