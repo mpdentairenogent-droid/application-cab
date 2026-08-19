@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Politique de confidentialité — Cabinet Dentaire App</title>
+<style>
+  :root { color-scheme: light dark; }
+  body {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 2.5rem 1.5rem 5rem;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.6;
+    color: #1d1d1f;
+    background: #fff;
+  }
+  @media (prefers-color-scheme: dark) {
+    body { color: #e6e6e6; background: #121212; }
+    a { color: #6cb4ff; }
+    .note { background: #2a2a1a; border-color: #55501f; }
+  }
+  h1 { font-size: 1.6rem; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.15rem; margin-top: 2.2rem; border-bottom: 1px solid currentColor; padding-bottom: 0.3rem; opacity: 0.95; }
+  .updated { opacity: 0.65; font-size: 0.9rem; margin-bottom: 2rem; }
+  .note {
+    background: #fff8e1;
+    border: 1px solid #e6d68a;
+    border-radius: 8px;
+    padding: 0.9rem 1.1rem;
+    font-size: 0.92rem;
+    margin: 1.5rem 0;
+  }
+  ul { padding-left: 1.3rem; }
+  li { margin-bottom: 0.4rem; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.95rem; }
+  th, td { text-align: left; padding: 0.5rem 0.7rem; border: 1px solid currentColor; border-color: rgba(128,128,128,0.35); vertical-align: top; }
+  th { opacity: 0.8; }
+  code { font-size: 0.9em; background: rgba(128,128,128,0.15); padding: 0.1em 0.35em; border-radius: 4px; }
+</style>
+</head>
+<body>
+
+<h1>Politique de confidentialité</h1>
+<p class="updated">Application « Cabinet Dentaire App » — dernière mise à jour : 18 août 2026</p>
+
+<p>Cette application est un outil de gestion interne pour le personnel du cabinet dentaire (tâches, stock, stérilisation, finances internes, organisation). Elle n'est pas destinée aux patients et ne contient aucun dossier médical patient nominatif.</p>
+
+<div class="note">
+  <strong>Note :</strong> ce brouillon est généré à partir du schéma de données réel de l'application. La raison sociale, l'adresse postale et l'e-mail de contact ci-dessous sont à confirmer avant publication définitive sur le Play Store.
+</div>
+
+<h2>1. Responsable du traitement</h2>
+<p>
+  Cabinet dentaire [raison sociale à compléter]<br>
+  Adresse : [adresse postale à compléter]<br>
+  Contact : <a href="mailto:mpdentaire.nogent@gmail.com">mpdentaire.nogent@gmail.com</a>
+</p>
+
+<h2>2. Qui utilise cette application</h2>
+<p>Uniquement le personnel du cabinet (titulaires, collaborateurs dentistes, assistantes, personnel administratif) via un compte nominatif créé par un administrateur du cabinet. L'application n'est pas disponible au grand public.</p>
+
+<h2>3. Données que nous collectons</h2>
+<table>
+  <tr><th>Catégorie</th><th>Détail</th></tr>
+  <tr><td>Compte / identification</td><td>Nom, prénom, téléphone (facultatif), photo de profil (facultative), rôle dans le cabinet, e-mail et mot de passe (gérés par le système d'authentification Supabase, mot de passe jamais stocké en clair)</td></tr>
+  <tr><td>Utilisation professionnelle</td><td>Tâches, notes internes, messages internes, demandes de matériel, commandes fournisseurs, mouvements de stock, cycles et contrôles de stérilisation, maintenance des équipements, chiffre d'affaires et dépenses du cabinet, documents et check-lists, absences, calendrier interne</td></tr>
+  <tr><td>Photos prises dans l'app</td><td>Photos de factures, d'étiquettes de cycle de stérilisation ou d'articles de stock — des documents administratifs et d'équipement, jamais des photos de patients</td></tr>
+  <tr><td>Notifications push</td><td>Un jeton technique propre à l'appareil (via Expo), utilisé uniquement pour l'envoi de notifications liées à l'activité du cabinet</td></tr>
+  <tr><td>Authentification biométrique</td><td>Si l'utilisateur l'active, le déverrouillage par empreinte/Face ID est entièrement géré par le système d'exploitation du téléphone — aucune donnée biométrique n'est transmise à ou stockée par l'application ou ses serveurs</td></tr>
+  <tr><td>Journal d'activité</td><td>Un historique des actions effectuées dans l'app (qui a fait quoi, quand) à des fins de sécurité et de traçabilité interne</td></tr>
+</table>
+
+<h2>4. Fonctionnalités utilisant l'intelligence artificielle</h2>
+<p>Deux fonctionnalités permettent de photographier un document pour pré-remplir un formulaire :</p>
+<ul>
+  <li>Scan d'une facture pour préremplir une dépense</li>
+  <li>Scan d'une étiquette de cycle d'autoclave pour préremplir un cycle de stérilisation</li>
+</ul>
+<p>Dans les deux cas : la photo est envoyée depuis nos serveurs (jamais directement depuis le téléphone) à l'API Claude d'Anthropic pour en extraire le texte utile. Le résultat est une <strong>suggestion</strong> : rien n'est enregistré automatiquement, l'utilisateur du cabinet vérifie et valide toujours avant sauvegarde. Seuls des documents administratifs (factures, étiquettes) sont concernés — jamais de document ou photo relatif à un patient.</p>
+
+<h2>5. Pourquoi nous utilisons ces données</h2>
+<p>Uniquement pour faire fonctionner les outils de gestion interne du cabinet : organisation du travail, suivi du stock et des équipements, conformité de la stérilisation, suivi financier interne, et sécurité du système (traçabilité des actions, contrôle des accès par rôle).</p>
+
+<h2>6. Base légale</h2>
+<p>L'intérêt légitime du cabinet à organiser son activité interne, et l'exécution de la relation de travail avec le personnel concerné. Aucune donnée n'est utilisée à des fins de publicité ou de profilage.</p>
+
+<h2>7. Avec qui ces données sont partagées</h2>
+<p>Aucune vente ni partage à des fins commerciales. Des prestataires techniques (sous-traitants au sens du RGPD) sont utilisés pour faire fonctionner l'application :</p>
+<ul>
+  <li><strong>Supabase</strong> (hébergement de la base de données et des fichiers, région Europe/Irlande)</li>
+  <li><strong>Anthropic</strong> (traitement des deux fonctionnalités de scan par IA décrites ci-dessus, uniquement pour les documents administratifs soumis)</li>
+  <li><strong>Expo</strong> (acheminement technique des notifications push)</li>
+</ul>
+
+<h2>8. Durée de conservation</h2>
+<p>Les données d'un compte sont conservées le temps de la relation de travail avec le cabinet, puis supprimées ou anonymisées sauf obligation légale de conservation plus longue (documents comptables notamment). Un administrateur du cabinet peut demander la suppression d'un compte et de ses données associées.</p>
+
+<h2>9. Sécurité</h2>
+<p>Accès protégé par authentification et par des règles de sécurité au niveau de la base de données (chaque utilisateur ne voit que ce que son rôle autorise). Les connexions sont chiffrées. Les clés techniques sensibles ne sont jamais exposées dans l'application installée sur le téléphone.</p>
+
+<h2>10. Vos droits</h2>
+<p>Conformément au RGPD, chaque membre du personnel dispose d'un droit d'accès, de rectification, d'effacement, de limitation et de portabilité de ses données, ainsi que du droit d'introduire une réclamation auprès de la CNIL. Pour exercer ces droits, contactez : <a href="mailto:mpdentaire.nogent@gmail.com">mpdentaire.nogent@gmail.com</a>.</p>
+
+<h2>11. Modifications</h2>
+<p>Cette politique peut évoluer avec l'application. La date de mise à jour en haut de page reflète la dernière version.</p>
+
+</body>
+</html>
