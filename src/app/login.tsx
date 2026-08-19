@@ -67,6 +67,9 @@ export default function LoginScreen() {
           <Link href="/forgot-password" style={[styles.forgotLink, { color: theme.secondary }]}>
             Mot de passe oublié ?
           </Link>
+          <Link href="/signup" style={[styles.forgotLink, { color: theme.secondary }]}>
+            Créer un compte
+          </Link>
         </View>
       </KeyboardAvoidingView>
     </ScreenContainer>

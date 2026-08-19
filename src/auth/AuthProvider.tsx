@@ -4,7 +4,7 @@ import * as Linking from 'expo-linking';
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 
 import { supabase } from '@/lib/supabase';
-import type { ProfileRow } from '@/types/database';
+import type { AppRole, ProfileRow } from '@/types/database';
 
 interface AuthContextValue {
   session: Session | null;
@@ -20,6 +20,17 @@ interface AuthContextValue {
   isPasswordRecovery: boolean;
   clearPasswordRecovery: () => void;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
+  /**
+   * TODO(retirer avant publication) : le paramètre `role` permet à
+   * l'inscription publique de s'auto-attribuer n'importe quel rôle, y
+   * compris owner_dentist/super_admin. Ajouté temporairement à la demande de
+   * l'utilisateur pour créer le premier compte admin sans passer par la clé
+   * service_role. Sans ce paramètre, le trigger handle_new_user retombe sur
+   * 'assistant' — c'est ce comportement par défaut qu'il faut restaurer
+   * (retirer le sélecteur de rôle de signup.tsx et ce paramètre) avant toute
+   * publication publique de l'app.
+   */
+  signUp: (email: string, password: string, firstName: string, lastName: string, role?: AppRole) => Promise<{ error: string | null; needsEmailConfirmation: boolean }>;
   signOut: () => Promise<void>;
   requestPasswordReset: (email: string) => Promise<{ error: string | null }>;
   confirmPasswordReset: (newPassword: string) => Promise<{ error: string | null }>;
@@ -45,6 +56,8 @@ async function fetchProfileAndPermissions(userId: string) {
 function translateAuthError(message: string): string {
   if (message.includes('Invalid login credentials')) return 'Email ou mot de passe incorrect.';
   if (message.includes('Email not confirmed')) return "Ce compte n'a pas encore été confirmé.";
+  if (message.includes('User already registered')) return 'Un compte existe déjà avec cet email.';
+  if (message.includes('Password should be at least')) return 'Le mot de passe doit faire au moins 8 caractères.';
   return 'Une erreur est survenue. Réessaie dans un instant.';
 }
 
@@ -90,6 +103,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { error: error ? translateAuthError(error.message) : null };
   };
 
+  const signUp: AuthContextValue['signUp'] = async (email, password, firstName, lastName, role) => {
+    setIsSigningIn(true);
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        // `role` temporaire — voir TODO sur le type signUp ci-dessus. Sans
+        // valeur, le trigger handle_new_user retombe sur 'assistant'.
+        data: { first_name: firstName, last_name: lastName, ...(role ? { role } : {}) },
+        emailRedirectTo: Linking.createURL('login'),
+      },
+    });
+    setIsSigningIn(false);
+    return {
+      error: error ? translateAuthError(error.message) : null,
+      needsEmailConfirmation: !error && !data.session,
+    };
+  };
+
   const signOut = async () => {
     await supabase.auth.signOut();
     queryClient.clear();
@@ -120,6 +152,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isPasswordRecovery,
       clearPasswordRecovery: () => setIsPasswordRecovery(false),
       signIn,
+      signUp,
       signOut,
       requestPasswordReset,
       confirmPasswordReset,
