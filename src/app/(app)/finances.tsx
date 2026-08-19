@@ -10,10 +10,11 @@ import { RevenueEntryFormSheet } from '@/components/finance/RevenueEntryFormShee
 import { ScanReceiptSheet } from '@/components/finance/ScanReceiptSheet';
 import { TargetFormSheet } from '@/components/finance/TargetFormSheet';
 import { Badge, Card, ChipSelect, Divider, EmptyState, LoadingState, PickerField, ProgressBar, ScreenContainer, StatTile } from '@/components/ui';
-import { EXPENSE_CATEGORY_LABEL, TARGET_PERIOD_LABEL } from '@/constants/financeLabels';
+import { EXPENSE_CATEGORY_LABEL, PAYMENT_METHOD_OPTIONS, TARGET_PERIOD_LABEL } from '@/constants/financeLabels';
 import { PERMISSIONS } from '@/constants/permissions';
 import { spacing, typography } from '@/constants/theme';
 import { useAppTheme } from '@/hooks/useAppTheme';
+import { rowsToCsv, shareCsv } from '@/lib/csv';
 import { formatCurrency, formatDate, toISODate } from '@/lib/format';
 import { usePermissions } from '@/permissions/usePermissions';
 import type { ExtractedExpense } from '@/services/aiExtraction';
@@ -169,6 +170,32 @@ export default function FinancesScreen() {
     enabled: view === 'statistiques',
   });
 
+  const paymentMethodLabel = Object.fromEntries(PAYMENT_METHOD_OPTIONS.map((o) => [o.value, o.label])) as Record<string, string>;
+
+  async function handleExportCa() {
+    const rows = (monthEntriesQuery.data ?? []).map((entry) => [
+      formatDate(entry.entry_date),
+      practitionerNameById.get(entry.practitioner_id) ?? '',
+      Number(entry.amount),
+      entry.patient_count ?? '',
+      entry.comment ?? '',
+    ]);
+    const csv = rowsToCsv(['Date', 'Praticien', 'Montant', 'Patients', 'Commentaire'], rows);
+    await shareCsv(`ca-${selectedYear}-${String(selectedMonth).padStart(2, '0')}.csv`, csv);
+  }
+
+  async function handleExportExpenses() {
+    const rows = (expensesQuery.data ?? []).map((expense) => [
+      formatDate(expense.expense_date),
+      EXPENSE_CATEGORY_LABEL[expense.category],
+      Number(expense.amount),
+      expense.payment_method ? (paymentMethodLabel[expense.payment_method] ?? expense.payment_method) : '',
+      expense.comment ?? '',
+    ]);
+    const csv = rowsToCsv(['Date', 'Catégorie', 'Montant', 'Moyen de paiement', 'Commentaire'], rows);
+    await shareCsv('depenses.csv', csv);
+  }
+
   function invalidateAll() {
     queryClient.invalidateQueries({ queryKey: ['finances-month-comparison'] });
     queryClient.invalidateQueries({ queryKey: ['finances-month-entries'] });
@@ -221,17 +248,30 @@ export default function FinancesScreen() {
     <ScreenContainer>
       <View style={styles.header}>
         <Text style={[styles.title, { color: theme.textPrimary }]}>Finances</Text>
-        {view === 'ca' && canManageRevenue ? (
-          <Pressable
-            onPress={() => {
-              setEditingEntry(undefined);
-              setEntryFormOpen(true);
-            }}
-            accessibilityRole="button"
-            accessibilityLabel="Nouveau CA"
-            style={[styles.addButton, { backgroundColor: theme.primary }]}>
-            <Ionicons name="add" size={24} color={theme.textOnPrimary} />
-          </Pressable>
+        {view === 'ca' ? (
+          <View style={styles.headerActions}>
+            {canSeeRevenue ? (
+              <Pressable
+                onPress={handleExportCa}
+                accessibilityRole="button"
+                accessibilityLabel="Exporter le CA du mois en CSV"
+                style={[styles.addButton, { backgroundColor: theme.surfaceAlt }]}>
+                <Ionicons name="share-outline" size={20} color={theme.textPrimary} />
+              </Pressable>
+            ) : null}
+            {canManageRevenue ? (
+              <Pressable
+                onPress={() => {
+                  setEditingEntry(undefined);
+                  setEntryFormOpen(true);
+                }}
+                accessibilityRole="button"
+                accessibilityLabel="Nouveau CA"
+                style={[styles.addButton, { backgroundColor: theme.primary }]}>
+                <Ionicons name="add" size={24} color={theme.textOnPrimary} />
+              </Pressable>
+            ) : null}
+          </View>
         ) : null}
         {view === 'objectifs' && canManageRevenue ? (
           <Pressable
@@ -245,26 +285,39 @@ export default function FinancesScreen() {
             <Ionicons name="add" size={24} color={theme.textOnPrimary} />
           </Pressable>
         ) : null}
-        {view === 'depenses' && canManageExpenses ? (
+        {view === 'depenses' ? (
           <View style={styles.headerActions}>
-            <Pressable
-              onPress={() => setScanSheetOpen(true)}
-              accessibilityRole="button"
-              accessibilityLabel="Scanner une facture"
-              style={[styles.addButton, { backgroundColor: theme.surfaceAlt }]}>
-              <Ionicons name="camera-outline" size={22} color={theme.textPrimary} />
-            </Pressable>
-            <Pressable
-              onPress={() => {
-                setEditingExpense(undefined);
-                setExpensePrefill(undefined);
-                setExpenseFormOpen(true);
-              }}
-              accessibilityRole="button"
-              accessibilityLabel="Nouvelle dépense"
-              style={[styles.addButton, { backgroundColor: theme.primary }]}>
-              <Ionicons name="add" size={24} color={theme.textOnPrimary} />
-            </Pressable>
+            {canViewExpenses ? (
+              <Pressable
+                onPress={handleExportExpenses}
+                accessibilityRole="button"
+                accessibilityLabel="Exporter les dépenses en CSV"
+                style={[styles.addButton, { backgroundColor: theme.surfaceAlt }]}>
+                <Ionicons name="share-outline" size={20} color={theme.textPrimary} />
+              </Pressable>
+            ) : null}
+            {canManageExpenses ? (
+              <>
+                <Pressable
+                  onPress={() => setScanSheetOpen(true)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Scanner une facture"
+                  style={[styles.addButton, { backgroundColor: theme.surfaceAlt }]}>
+                  <Ionicons name="camera-outline" size={22} color={theme.textPrimary} />
+                </Pressable>
+                <Pressable
+                  onPress={() => {
+                    setEditingExpense(undefined);
+                    setExpensePrefill(undefined);
+                    setExpenseFormOpen(true);
+                  }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Nouvelle dépense"
+                  style={[styles.addButton, { backgroundColor: theme.primary }]}>
+                  <Ionicons name="add" size={24} color={theme.textOnPrimary} />
+                </Pressable>
+              </>
+            ) : null}
           </View>
         ) : null}
       </View>
