@@ -41,3 +41,24 @@ export async function analyzeSterilizationCycle(imageBase64: string, mimeType: s
   if (!data || data.error || !data.extracted) throw new Error(data?.error ?? "Échec de l'analyse du cycle.");
   return data.extracted;
 }
+
+export interface ExtractedDeliveryItem {
+  name: string;
+  quantity: number;
+}
+
+export interface ExtractedDelivery {
+  supplierName: string | null;
+  deliveryDate: string | null;
+  items: ExtractedDeliveryItem[];
+}
+
+/** Même principe que les deux autres scans, pour une photo de bon de livraison — voir analyze-delivery-note. Le rapprochement avec le catalogue stock se fait ensuite côté client (services/deliveryReceipt.ts), pas ici. */
+export async function analyzeDeliveryNote(imageBase64: string, mimeType: string): Promise<ExtractedDelivery> {
+  const { data, error } = await supabase.functions.invoke<{ extracted?: ExtractedDelivery; error?: string }>('analyze-delivery-note', {
+    body: { imageBase64, mimeType },
+  });
+  if (error) throw error;
+  if (!data || data.error || !data.extracted) throw new Error(data?.error ?? "Échec de l'analyse du bon de livraison.");
+  return data.extracted;
+}

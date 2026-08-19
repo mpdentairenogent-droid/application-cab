@@ -6,9 +6,11 @@ import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Badge, Card, ChipSelect, EmptyState, LoadingState, ScreenContainer } from '@/components/ui';
 import { CategoryBadge } from '@/components/stock/CategoryBadge';
 import { CategoryFormSheet } from '@/components/stock/CategoryFormSheet';
+import { DeliveryReceiptReviewSheet } from '@/components/stock/DeliveryReceiptReviewSheet';
 import { MaterialRequestDetailSheet } from '@/components/stock/MaterialRequestDetailSheet';
 import { MaterialRequestFormSheet } from '@/components/stock/MaterialRequestFormSheet';
 import { MaterialRequestsBoard } from '@/components/stock/MaterialRequestsBoard';
+import { ScanDeliveryNoteSheet } from '@/components/stock/ScanDeliveryNoteSheet';
 import { StockImportSheet } from '@/components/stock/StockImportSheet';
 import { StockItemFormSheet } from '@/components/stock/StockItemFormSheet';
 import { StockMovementFormSheet } from '@/components/stock/StockMovementFormSheet';
@@ -18,6 +20,7 @@ import { MATERIAL_REQUEST_STATUS_LABEL, MATERIAL_REQUEST_STATUS_TONE, URGENCY_LA
 import { useAppTheme } from '@/hooks/useAppTheme';
 import { formatDate } from '@/lib/format';
 import { usePermissions } from '@/permissions/usePermissions';
+import type { ExtractedDelivery } from '@/services/aiExtraction';
 import { listAllMaterialRequests, setMaterialRequestStatus, summarizeRequestItems, type MaterialRequestWithItems } from '@/services/materialRequests';
 import { listAllStockItems, listExpiringStock } from '@/services/stock';
 import { listStockCategories } from '@/services/stockCategories';
@@ -55,6 +58,15 @@ export default function StockScreen() {
   const [categoryFormOpen, setCategoryFormOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState<StockCategoryRow | undefined>(undefined);
   const [importSheetOpen, setImportSheetOpen] = useState(false);
+  const [scanDeliverySheetOpen, setScanDeliverySheetOpen] = useState(false);
+  const [deliveryReviewOpen, setDeliveryReviewOpen] = useState(false);
+  const [deliveryDraft, setDeliveryDraft] = useState<ExtractedDelivery | null>(null);
+
+  function handleDeliveryExtracted(draft: ExtractedDelivery) {
+    setScanDeliverySheetOpen(false);
+    setDeliveryDraft(draft);
+    setDeliveryReviewOpen(true);
+  }
 
   const itemsQuery = useQuery({ queryKey: ['stock-items-all'], queryFn: listAllStockItems, enabled: view === 'items' });
   const requestsQuery = useQuery({ queryKey: ['material-requests-all'], queryFn: listAllMaterialRequests, enabled: view === 'requests' });
@@ -101,6 +113,13 @@ export default function StockScreen() {
               accessibilityLabel="Importer un fichier Excel"
               style={[styles.addButton, { backgroundColor: theme.surfaceAlt }]}>
               <Ionicons name="document-attach-outline" size={22} color={theme.textPrimary} />
+            </Pressable>
+            <Pressable
+              onPress={() => setScanDeliverySheetOpen(true)}
+              accessibilityRole="button"
+              accessibilityLabel="Scanner un bon de livraison"
+              style={[styles.addButton, { backgroundColor: theme.surfaceAlt }]}>
+              <Ionicons name="camera-outline" size={22} color={theme.textPrimary} />
             </Pressable>
             <Pressable
               onPress={() => {
@@ -296,6 +315,23 @@ export default function StockScreen() {
           setImportSheetOpen(false);
           invalidateAll();
         }}
+      />
+
+      <ScanDeliveryNoteSheet visible={scanDeliverySheetOpen} onClose={() => setScanDeliverySheetOpen(false)} onExtracted={handleDeliveryExtracted} />
+
+      <DeliveryReceiptReviewSheet
+        visible={deliveryReviewOpen}
+        onClose={() => {
+          setDeliveryReviewOpen(false);
+          setDeliveryDraft(null);
+        }}
+        onReceived={() => {
+          setDeliveryReviewOpen(false);
+          setDeliveryDraft(null);
+          invalidateAll();
+        }}
+        draft={deliveryDraft}
+        stockItems={itemsQuery.data ?? []}
       />
 
       <StockMovementFormSheet
