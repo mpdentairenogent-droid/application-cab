@@ -41,7 +41,7 @@ Pour le détail complet de la demande initiale : `docs/CAHIER_DES_CHARGES.md`. P
 
 ## En attente / pas finalisé
 
-- **Publication Play Store** : l'artefact `.aab` de production existe déjà (build `d957c742`, voir Infrastructure) et n'a pas encore été soumis. Compte Google Play Console en cours de création côté utilisateur, statut à confirmer. Politique de confidentialité pas encore rédigée (nécessaire même en test interne, l'app touchant des données personnelles).
+- **Publication Play Store** : l'artefact `.aab` de production existe déjà (build `d957c742`, voir Infrastructure) et n'a pas encore été soumis. Compte Google Play Console en cours de création côté utilisateur, statut à confirmer. Politique de confidentialité rédigée et publiée le 19/08/2026 sur `https://mpdentairenogent-droid.github.io/application-cab/` (branche `gh-pages` dédiée, séparée de `main` pour ne jamais exposer le reste du dépôt via Pages). **Reste un brouillon** : raison sociale et adresse postale du cabinet encore en placeholder dans le texte, à compléter avant soumission définitive.
 - **Distribution iOS** : entièrement en pause, décision explicitement reportée par l'utilisateur.
 - **3ᵉ cas d'usage IA (bons de livraison / articles de commande)** : prévu, pas commencé. Réutiliser le module partagé `supabase/functions/_shared/claudeVision.ts` plutôt que repartir de zéro.
 - **Réglages du cabinet** (`app_settings` : nom, adresse, téléphone, email) : aucun écran dans l'app pour les modifier — toujours la valeur par défaut du seed initial.
