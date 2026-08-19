@@ -26,12 +26,14 @@ type SupplierFormValues = z.infer<typeof supplierSchema>;
 interface SupplierFormSheetProps {
   visible: boolean;
   onClose: () => void;
-  onSaved: () => void;
+  onSaved: (supplier: SupplierRow) => void;
   supplier?: SupplierRow;
+  /** Nom pré-rempli à la création rapide depuis un autre écran (ex. fournisseur non reconnu au scan d'une facture). Ignoré en édition. */
+  defaultName?: string;
 }
 
-function defaultsFor(supplier?: SupplierRow): SupplierFormValues {
-  if (!supplier) return { name: '', category: '', salesRepName: '', phone: '', email: '', website: '', notes: '' };
+function defaultsFor(supplier?: SupplierRow, defaultName?: string): SupplierFormValues {
+  if (!supplier) return { name: defaultName ?? '', category: '', salesRepName: '', phone: '', email: '', website: '', notes: '' };
   return {
     name: supplier.name,
     category: supplier.category ?? '',
@@ -43,7 +45,7 @@ function defaultsFor(supplier?: SupplierRow): SupplierFormValues {
   };
 }
 
-export function SupplierFormSheet({ visible, onClose, onSaved, supplier }: SupplierFormSheetProps) {
+export function SupplierFormSheet({ visible, onClose, onSaved, supplier, defaultName }: SupplierFormSheetProps) {
   const theme = useAppTheme();
   const isEditing = !!supplier;
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -54,7 +56,11 @@ export function SupplierFormSheet({ visible, onClose, onSaved, supplier }: Suppl
     control,
     handleSubmit,
     formState: { errors },
-  } = useForm<SupplierFormValues>({ resolver: zodResolver(supplierSchema), defaultValues: defaultsFor(supplier), values: visible ? defaultsFor(supplier) : undefined });
+  } = useForm<SupplierFormValues>({
+    resolver: zodResolver(supplierSchema),
+    defaultValues: defaultsFor(supplier, defaultName),
+    values: visible ? defaultsFor(supplier, defaultName) : undefined,
+  });
 
   const onSubmit = handleSubmit(async (values) => {
     setIsSubmitting(true);
@@ -69,12 +75,8 @@ export function SupplierFormSheet({ visible, onClose, onSaved, supplier }: Suppl
         website: values.website.trim() || null,
         notes: values.notes.trim() || null,
       };
-      if (isEditing) {
-        await updateSupplier(supplier.id, payload);
-      } else {
-        await createSupplier(payload);
-      }
-      onSaved();
+      const saved = isEditing ? await updateSupplier(supplier.id, payload) : await createSupplier(payload);
+      onSaved(saved);
     } catch (error) {
       setSubmitError(getErrorMessage(error));
     } finally {
@@ -87,7 +89,7 @@ export function SupplierFormSheet({ visible, onClose, onSaved, supplier }: Suppl
     setIsSubmitting(true);
     try {
       await deleteSupplier(supplier.id);
-      onSaved();
+      onSaved(supplier);
     } catch (error) {
       setSubmitError(getErrorMessage(error));
       setIsSubmitting(false);

@@ -5,7 +5,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { useAuth } from '@/auth/AuthProvider';
 import { BarChart } from '@/components/finance/BarChart';
-import { ExpenseFormSheet } from '@/components/finance/ExpenseFormSheet';
+import { ExpenseFormSheet, type ExpenseFormValues } from '@/components/finance/ExpenseFormSheet';
 import { RevenueEntryFormSheet } from '@/components/finance/RevenueEntryFormSheet';
 import { ScanReceiptSheet } from '@/components/finance/ScanReceiptSheet';
 import { TargetFormSheet } from '@/components/finance/TargetFormSheet';
@@ -15,6 +15,7 @@ import { PERMISSIONS } from '@/constants/permissions';
 import { spacing, typography } from '@/constants/theme';
 import { useAppTheme } from '@/hooks/useAppTheme';
 import { rowsToCsv, shareCsv } from '@/lib/csv';
+import { findClosestMatch } from '@/lib/duplicateDetection';
 import { formatCurrency, formatDate, toISODate } from '@/lib/format';
 import { usePermissions } from '@/permissions/usePermissions';
 import type { ExtractedExpense } from '@/services/aiExtraction';
@@ -31,6 +32,7 @@ import {
   listTargetsWithActuals,
   type TargetWithActual,
 } from '@/services/revenue';
+import { listSuppliers } from '@/services/suppliers';
 import type { ExpenseRow, RevenueEntryRow } from '@/types/database';
 
 type FinanceView = 'apercu' | 'ca' | 'objectifs' | 'depenses' | 'statistiques';
@@ -104,17 +106,47 @@ export default function FinancesScreen() {
   const [expenseFormOpen, setExpenseFormOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState<ExpenseRow | undefined>(undefined);
   const [scanSheetOpen, setScanSheetOpen] = useState(false);
-  const [expensePrefill, setExpensePrefill] = useState<{ amount: string; expenseDate: string; category: ExpenseRow['category']; comment: string; photoUrl: string } | undefined>(undefined);
+  const [expensePrefill, setExpensePrefill] = useState<Partial<ExpenseFormValues> | undefined>(undefined);
+  const [unmatchedSupplierName, setUnmatchedSupplierName] = useState<string | null>(null);
+
+  // Chargée d'avance (pas seulement quand le sheet dépense est ouvert) : il
+  // faut la liste déjà en cache au moment où le scan IA revient, pour
+  // pouvoir rapprocher le nom extrait sans attendre un nouveau fetch.
+  const scanSuppliersQuery = useQuery({ queryKey: ['suppliers'], queryFn: listSuppliers, enabled: canManageExpenses });
 
   function handleReceiptExtracted(draft: ExtractedExpense, photoUri: string) {
     setScanSheetOpen(false);
     setEditingExpense(undefined);
+    // Rapprochement flou du nom extrait avec un fournisseur existant (même
+    // logique que les doublons de stock) : lié directement si trouvé ; sinon
+    // proposé à la création (voir ExpenseFormSheet) et laissé en commentaire
+    // en filet de sécurité — jamais perdu, jamais deviné à tort silencieusement.
+    const supplierMatch = draft.supplierName ? findClosestMatch(draft.supplierName, scanSuppliersQuery.data ?? [], (s) => s.name) : null;
+    setUnmatchedSupplierName(supplierMatch ? null : draft.supplierName);
     setExpensePrefill({
       amount: draft.amount != null ? String(draft.amount) : '',
       expenseDate: draft.expenseDate ?? toISODate(new Date()),
       category: draft.category,
-      comment: [draft.supplierName, draft.comment].filter(Boolean).join(' — '),
+      supplierId: supplierMatch ? supplierMatch.item.id : null,
+      comment: [supplierMatch ? null : draft.supplierName, draft.comment].filter(Boolean).join(' — '),
       photoUrl: photoUri,
+    });
+    setExpenseFormOpen(true);
+  }
+
+  // Reprend catégorie/fournisseur/montant/moyen de paiement (le plus souvent
+  // identiques d'une occurrence à l'autre pour une dépense récurrente) ;
+  // date repart sur aujourd'hui, pas de justificatif reporté — un nouveau
+  // paiement appelle son propre justificatif, jamais celui de l'ancien.
+  function handleDuplicateExpense(expense: ExpenseRow) {
+    setUnmatchedSupplierName(null);
+    setEditingExpense(undefined);
+    setExpensePrefill({
+      amount: String(expense.amount),
+      category: expense.category,
+      supplierId: expense.supplier_id,
+      paymentMethod: expense.payment_method ?? '',
+      comment: expense.comment ?? '',
     });
     setExpenseFormOpen(true);
   }
@@ -309,6 +341,7 @@ export default function FinancesScreen() {
                   onPress={() => {
                     setEditingExpense(undefined);
                     setExpensePrefill(undefined);
+                    setUnmatchedSupplierName(null);
                     setExpenseFormOpen(true);
                   }}
                   accessibilityRole="button"
@@ -510,6 +543,7 @@ export default function FinancesScreen() {
                   if (!canManageExpenses) return;
                   setEditingExpense(expense);
                   setExpensePrefill(undefined);
+                  setUnmatchedSupplierName(null);
                   setExpenseFormOpen(true);
                 }}>
                 <Card style={styles.row}>
@@ -635,14 +669,18 @@ export default function FinancesScreen() {
         onClose={() => {
           setExpenseFormOpen(false);
           setExpensePrefill(undefined);
+          setUnmatchedSupplierName(null);
         }}
         onSaved={() => {
           setExpenseFormOpen(false);
           setExpensePrefill(undefined);
+          setUnmatchedSupplierName(null);
           invalidateAll();
         }}
         expense={editingExpense}
         prefill={expensePrefill}
+        onDuplicate={handleDuplicateExpense}
+        unmatchedSupplierName={unmatchedSupplierName}
       />
 
       <ScanReceiptSheet visible={scanSheetOpen} onClose={() => setScanSheetOpen(false)} onExtracted={handleReceiptExtracted} />

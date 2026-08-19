@@ -54,6 +54,14 @@ export default function SterilizationScreen() {
     setCycleFormOpen(true);
   }
 
+  // Reprend l'appareil et le programme (ce qui ne change quasi jamais d'un
+  // cycle à l'autre) ; laisse numéro de cycle/lot et résultat à ressaisir —
+  // ce sont eux qui varient réellement à chaque cycle.
+  function handleDuplicateCycle(cycle: SterilizationCycleRow) {
+    setCyclePrefill({ equipmentId: cycle.equipment_id, program: cycle.program, cycleNumber: null, batchNumber: null, result: 'conforming', comment: null });
+    setCycleFormOpen(true);
+  }
+
   const cyclesQuery = useQuery({ queryKey: ['sterilization-cycles-all'], queryFn: () => listCycles(), enabled: view === 'cycles' });
   const controlsQuery = useQuery({ queryKey: ['sterilization-controls-all'], queryFn: () => listControls(), enabled: view === 'controls' });
   const incidentsQuery = useQuery({ queryKey: ['sterilization-incidents-all'], queryFn: () => listIncidents(), enabled: view === 'incidents' });
@@ -112,6 +120,16 @@ export default function SterilizationScreen() {
                   <Text style={[styles.itemHint, { color: theme.textMuted }]}>{formatDateTime(cycle.performed_at)}</Text>
                 </View>
                 <Badge label={CYCLE_RESULT_LABEL[cycle.result]} tone={CYCLE_RESULT_TONE[cycle.result]} />
+                {canManage ? (
+                  <Pressable
+                    onPress={() => handleDuplicateCycle(cycle)}
+                    accessibilityRole="button"
+                    accessibilityLabel="Dupliquer ce cycle"
+                    hitSlop={8}
+                    style={styles.duplicateButton}>
+                    <Ionicons name="copy-outline" size={20} color={theme.textSecondary} />
+                  </Pressable>
+                ) : null}
               </Card>
             ))}
           </View>
@@ -224,6 +242,7 @@ const styles = StyleSheet.create({
   addButton: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
   list: { gap: spacing.sm },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  duplicateButton: { padding: spacing.xs },
   thumbnail: { width: 40, height: 40, borderRadius: 8 },
   flex1: { flex: 1 },
   itemTitle: { fontSize: typography.size.base, fontWeight: typography.weight.medium },

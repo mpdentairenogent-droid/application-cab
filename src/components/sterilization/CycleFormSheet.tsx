@@ -29,18 +29,21 @@ const cycleSchema = z.object({
 type CycleFormValues = z.infer<typeof cycleSchema>;
 
 export interface CyclePrefill {
+  /** Absent (scan IA, qui ne voit pas l'appareil) vs présent (duplication d'un cycle existant). */
+  equipmentId?: string | null;
   cycleNumber: string | null;
   program: string | null;
   batchNumber: string | null;
   /** null = résultat non déterminé par le scan IA (voir ScanCycleLabelSheet) — jamais deviné, à confirmer soi-même. */
   result: 'conforming' | 'non_conforming' | null;
   comment: string | null;
-  photoUrl: string;
+  /** Absent en cas de duplication : une nouvelle étiquette physique appelle sa propre photo, jamais celle du cycle dupliqué. */
+  photoUrl?: string | null;
 }
 
 function defaultsFor(prefill?: CyclePrefill): CycleFormValues {
   return {
-    equipmentId: null,
+    equipmentId: prefill?.equipmentId ?? null,
     cycleNumber: prefill?.cycleNumber ?? '',
     program: prefill?.program ?? '',
     batchNumber: prefill?.batchNumber ?? '',

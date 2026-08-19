@@ -8,13 +8,15 @@ export async function listSuppliers() {
 }
 
 export async function createSupplier(input: SupplierInsert) {
-  const { error } = await supabase.from('suppliers').insert(input);
+  const { data, error } = await supabase.from('suppliers').insert(input).select().single();
   if (error) throw error;
+  return data;
 }
 
 export async function updateSupplier(id: string, input: SupplierUpdate) {
-  const { error } = await supabase.from('suppliers').update(input).eq('id', id);
+  const { data, error } = await supabase.from('suppliers').update(input).eq('id', id).select().single();
   if (error) throw error;
+  return data;
 }
 
 export async function deleteSupplier(id: string) {
