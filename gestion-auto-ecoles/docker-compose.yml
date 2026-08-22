@@ -1,0 +1,44 @@
+name: gestion-auto-ecoles
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: auto_ecoles
+      POSTGRES_PASSWORD: auto_ecoles_dev_password
+      POSTGRES_DB: auto_ecoles
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U auto_ecoles -d auto_ecoles"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Stockage des documents, compatible API S3. En production, remplacer par un
+  # vrai bucket S3/R2/OVH (voir src/server/storage.ts) : seuls les identifiants
+  # et l'endpoint changent, le code applicatif est identique.
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: auto_ecoles_admin
+      MINIO_ROOT_PASSWORD: auto_ecoles_dev_password
+    ports:
+      - "9000:9000" # API S3
+      - "9001:9001" # Console web
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres_data:
+  minio_data:

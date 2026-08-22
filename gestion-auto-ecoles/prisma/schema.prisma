@@ -1,0 +1,1238 @@
+// Schéma de données — Gestion multi-établissements auto-écoles
+//
+// Conventions générales :
+// - Montants monétaires toujours en centimes entiers (Int, suffixe *Cents) pour éviter les erreurs d'arrondi.
+// - Toutes les DateTime sont stockées en UTC (timestamptz Postgres) ; la conversion Europe/Paris se fait
+//   uniquement à l'affichage (voir src/lib/utils.ts). Ne jamais stocker une heure "locale" en clair.
+// - Les tables métier portent un jeu de colonnes communes quand pertinent : organizationId, drivingSchoolId,
+//   createdAt/updatedAt, createdById/updatedById, archivedAt, status — conformément au cahier des charges.
+// - Aucune suppression définitive exposée en interface standard : archivage via archivedAt.
+// - `Document` est la table de stockage physique unique pour toutes les pièces jointes (élève, salarié,
+//   véhicule, examen) : on évite de dupliquer la plomberie fichier (storageKey/mimeType/URL signée) dans une
+//   table "StudentDocument" séparée — un Document avec studentId non nul EST le document élève.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ============================================================================
+// IDENTITÉ & ACCÈS
+// ============================================================================
+
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  drivingSchools DrivingSchool[]
+  users          User[]
+  roles          Role[]
+  auditLogs      AuditLog[]
+  notifications  Notification[]
+
+  @@map("organizations")
+}
+
+model DrivingSchool {
+  id             String    @id @default(cuid())
+  organizationId String
+  name           String
+  legalName      String?
+  siret          String?
+  address        String?
+  postalCode     String?
+  city           String?
+  phone          String?
+  email          String?
+  timezone       String    @default("Europe/Paris")
+  active         Boolean   @default(true)
+  createdAt      DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime  @updatedAt @db.Timestamptz(3)
+  archivedAt     DateTime? @db.Timestamptz(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  userAccess       UserDrivingSchool[]
+  employeeAccess   EmployeeDrivingSchool[]
+  students         Student[]
+  employees        Employee[]              @relation("EmployeePrimarySchool")
+  vehicles         Vehicle[]
+  trainingPackages TrainingPackage[]
+  enrollments      Enrollment[]
+  lessons          Lesson[]
+  examAllocations  ExamAllocation[]
+  leaveRequests    LeaveRequest[]
+  timesheets       Timesheet[]
+  payrollVariables PayrollVariable[]
+  payments         Payment[]
+  expenses         Expense[]
+  documents        Document[]
+  notifications    Notification[]
+  auditLogs        AuditLog[]
+  transfersFrom    TransferHistory[]       @relation("TransferFromSchool")
+  transfersTo      TransferHistory[]       @relation("TransferToSchool")
+
+  @@index([organizationId])
+  @@map("driving_schools")
+}
+
+enum GlobalRoleKey {
+  SUPER_ADMIN
+  GERANT
+  SECRETAIRE
+  MONITEUR
+}
+
+model Role {
+  id             String        @id @default(cuid())
+  organizationId String
+  key            GlobalRoleKey
+  label          String
+  description    String?
+  isSystem       Boolean       @default(true)
+  createdAt      DateTime      @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime      @updatedAt @db.Timestamptz(3)
+
+  organization    Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  users           User[]
+  rolePermissions RolePermission[]
+
+  @@unique([organizationId, key])
+  @@map("roles")
+}
+
+enum PermissionCategory {
+  ORGANISATION
+  ELEVES
+  DOCUMENTS
+  PAIEMENTS
+  PLANNING
+  EXAMENS
+  SALARIES
+  CONGES
+  VEHICULES
+  FINANCES
+  RAPPORTS
+  PARAMETRES
+}
+
+model Permission {
+  id          String             @id @default(cuid())
+  key         String             @unique
+  label       String
+  category    PermissionCategory
+  description String?
+
+  rolePermissions RolePermission[]
+  userPermissions UserPermission[]
+
+  @@map("permissions")
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+// Dérogation individuelle à la matrice par défaut du rôle (accorde ou retire explicitement).
+model UserPermission {
+  userId       String
+  permissionId String
+  granted      Boolean
+
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([userId, permissionId])
+  @@map("user_permissions")
+}
+
+enum UserStatus {
+  ACTIF
+  SUSPENDU
+  ARCHIVE
+}
+
+model User {
+  id                  String     @id @default(cuid())
+  organizationId      String
+  email               String     @unique
+  passwordHash        String
+  firstName           String
+  lastName            String
+  phone               String?
+  roleId              String
+  status              UserStatus @default(ACTIF)
+  failedLoginAttempts Int        @default(0)
+  lockedUntil         DateTime?  @db.Timestamptz(3)
+  lastLoginAt         DateTime?  @db.Timestamptz(3)
+  mustChangePassword  Boolean    @default(false)
+  createdAt           DateTime   @default(now()) @db.Timestamptz(3)
+  updatedAt           DateTime   @updatedAt @db.Timestamptz(3)
+  archivedAt          DateTime?  @db.Timestamptz(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  role         Role         @relation(fields: [roleId], references: [id])
+
+  drivingSchoolAccess UserDrivingSchool[]
+  userPermissions     UserPermission[]
+  employeeProfile     Employee?
+  auditLogs           AuditLog[]
+
+  @@index([organizationId])
+  @@map("users")
+}
+
+model UserDrivingSchool {
+  id              String   @id @default(cuid())
+  userId          String
+  drivingSchoolId String
+  createdAt       DateTime @default(now()) @db.Timestamptz(3)
+
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  drivingSchool DrivingSchool @relation(fields: [drivingSchoolId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, drivingSchoolId])
+  @@map("user_driving_schools")
+}
+
+// ============================================================================
+// JOURNAL D'AUDIT — append-only, aucune mutation exposée depuis l'application.
+// ============================================================================
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  ARCHIVE
+  UNARCHIVE
+  DELETE
+  LOGIN
+  LOGIN_FAILED
+  LOGOUT
+  VALIDATE
+  REFUSE
+  ASSIGN
+  UNASSIGN
+  TRANSFER
+  EXPORT
+}
+
+model AuditLog {
+  id              String      @id @default(cuid())
+  // Nullable : un échec de connexion avec un e-mail inconnu ne se rattache à
+  // aucune organisation identifiable, mais doit tout de même être tracé.
+  organizationId  String?
+  drivingSchoolId String?
+  userId          String?
+  action          AuditAction
+  entityType      String
+  entityId        String?
+  oldValues       Json?
+  newValues       Json?
+  ipAddress       String?
+  userAgent       String?
+  createdAt       DateTime    @default(now()) @db.Timestamptz(3)
+
+  organization  Organization?  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  drivingSchool DrivingSchool? @relation(fields: [drivingSchoolId], references: [id])
+  user          User?          @relation(fields: [userId], references: [id])
+
+  @@index([organizationId, createdAt])
+  @@index([entityType, entityId])
+  @@index([userId])
+  @@map("audit_logs")
+}
+
+// ============================================================================
+// ÉLÈVES
+// ============================================================================
+
+enum Civility {
+  M
+  MME
+}
+
+enum LicenseCategory {
+  AM
+  A1
+  A2
+  A
+  B1
+  B
+  BE
+  C1
+  C1E
+  C
+  CE
+  D1
+  D1E
+  D
+  DE
+}
+
+enum TrainingType {
+  TRADITIONNELLE
+  CONDUITE_ACCOMPAGNEE
+  CONDUITE_SUPERVISEE
+  ACCELEREE
+}
+
+enum StudentFileStatus {
+  INCOMPLET
+  COMPLET
+  EN_VALIDATION
+  VALIDE
+}
+
+enum StudentStatus {
+  ACTIF
+  SUSPENDU
+  TERMINE
+  ARCHIVE
+}
+
+model Student {
+  id                   String            @id @default(cuid())
+  organizationId       String
+  drivingSchoolId      String
+  internalNumber       String            @unique
+  civility             Civility
+  lastName             String
+  firstName            String
+  birthDate            DateTime?         @db.Timestamptz(3)
+  birthPlace           String?
+  address              String?
+  postalCode           String?
+  city                 String?
+  phone                String?
+  email                String?
+  legalGuardianName    String?
+  legalGuardianPhone   String?
+  legalGuardianEmail   String?
+  registeredAt         DateTime          @default(now()) @db.Timestamptz(3)
+  trainingType         TrainingType      @default(TRADITIONNELLE)
+  licenseCategory      LicenseCategory
+  nephNumber           String?
+  fileStatus           StudentFileStatus @default(INCOMPLET)
+  referentInstructorId String?
+  hoursBalance         Decimal           @default(0) @db.Decimal(6, 2)
+  internalNotes        String?
+  gdprConsentAt        DateTime?         @db.Timestamptz(3)
+  gdprConsentDetails   String?
+  status               StudentStatus     @default(ACTIF)
+  createdAt            DateTime          @default(now()) @db.Timestamptz(3)
+  updatedAt            DateTime          @updatedAt @db.Timestamptz(3)
+  createdById          String?
+  updatedById          String?
+  archivedAt           DateTime?         @db.Timestamptz(3)
+
+  drivingSchool      DrivingSchool @relation(fields: [drivingSchoolId], references: [id])
+  referentInstructor Employee?     @relation("StudentReferentInstructor", fields: [referentInstructorId], references: [id])
+
+  enrollments    Enrollment[]
+  lessons        Lesson[]
+  payments       Payment[]
+  examCandidates ExamCandidate[]
+  documents      Document[]
+
+  @@index([organizationId, drivingSchoolId])
+  @@index([lastName, firstName])
+  @@index([phone])
+  @@index([email])
+  @@index([nephNumber])
+  @@map("students")
+}
+
+model TrainingPackage {
+  id              String          @id @default(cuid())
+  drivingSchoolId String
+  name            String
+  licenseCategory LicenseCategory
+  includedHours   Decimal         @db.Decimal(6, 2)
+  priceCents      Int
+  description     String?
+  active          Boolean         @default(true)
+  createdAt       DateTime        @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime        @updatedAt @db.Timestamptz(3)
+  archivedAt      DateTime?       @db.Timestamptz(3)
+
+  drivingSchool DrivingSchool @relation(fields: [drivingSchoolId], references: [id])
+  enrollments   Enrollment[]
+
+  @@index([drivingSchoolId])
+  @@map("training_packages")
+}
+
+enum EnrollmentStatus {
+  EN_COURS
+  TERMINE
+  ABANDONNE
+  ANNULE
+}
+
+model Enrollment {
+  id                     String           @id @default(cuid())
+  studentId              String
+  trainingPackageId      String
+  drivingSchoolId        String
+  enrolledAt             DateTime         @default(now()) @db.Timestamptz(3)
+  priceAtEnrollmentCents Int
+  status                 EnrollmentStatus @default(EN_COURS)
+  notes                  String?
+  createdAt              DateTime         @default(now()) @db.Timestamptz(3)
+  updatedAt              DateTime         @updatedAt @db.Timestamptz(3)
+
+  student         Student         @relation(fields: [studentId], references: [id])
+  trainingPackage TrainingPackage @relation(fields: [trainingPackageId], references: [id])
+  drivingSchool   DrivingSchool   @relation(fields: [drivingSchoolId], references: [id])
+
+  @@index([studentId])
+  @@map("enrollments")
+}
+
+// ============================================================================
+// PLANNING & LEÇONS
+// ============================================================================
+
+enum LessonType {
+  CONDUITE
+  CODE
+  EVALUATION
+  EXAMEN_BLANC
+  PERFECTIONNEMENT
+}
+
+enum LessonStatus {
+  PLANIFIEE
+  CONFIRMEE
+  REALISEE
+  ANNULEE_ELEVE
+  ANNULEE_ECOLE
+  ABSENCE_ELEVE
+  ABSENCE_MONITEUR
+}
+
+model Lesson {
+  id                String       @id @default(cuid())
+  drivingSchoolId   String
+  studentId         String
+  instructorId      String
+  vehicleId         String?
+  scheduledStart    DateTime     @db.Timestamptz(3)
+  scheduledEnd      DateTime     @db.Timestamptz(3)
+  departureLocation String?
+  sessionType       LessonType   @default(CONDUITE)
+  status            LessonStatus @default(PLANIFIEE)
+  pedagogicalNotes  String?
+  cancelledReason   String?
+  recurrenceGroupId String?
+  createdAt         DateTime     @default(now()) @db.Timestamptz(3)
+  updatedAt         DateTime     @updatedAt @db.Timestamptz(3)
+  createdById       String?
+  updatedById       String?
+  archivedAt        DateTime?    @db.Timestamptz(3)
+
+  drivingSchool DrivingSchool @relation(fields: [drivingSchoolId], references: [id])
+  student       Student       @relation(fields: [studentId], references: [id])
+  instructor    Employee      @relation("LessonInstructor", fields: [instructorId], references: [id])
+  vehicle       Vehicle?      @relation(fields: [vehicleId], references: [id])
+
+  evaluation InstructorEvaluation?
+
+  @@index([drivingSchoolId, scheduledStart])
+  @@index([instructorId, scheduledStart])
+  @@index([vehicleId, scheduledStart])
+  @@index([studentId])
+  @@map("lessons")
+}
+
+model InstructorEvaluation {
+  id             String   @id @default(cuid())
+  lessonId       String   @unique
+  studentId      String
+  instructorId   String
+  skillsAssessed String?
+  progressNotes  String?
+  levelReached   String?
+  nextObjectives String?
+  createdAt      DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime @updatedAt @db.Timestamptz(3)
+
+  lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@map("instructor_evaluations")
+}
+
+// ============================================================================
+// PLACES & SESSIONS D'EXAMEN
+// ============================================================================
+
+enum ExamAllocationStatus {
+  ACTIVE
+  CLOTUREE
+  ANNULEE
+}
+
+model ExamAllocation {
+  id              String               @id @default(cuid())
+  drivingSchoolId String
+  licenseCategory LicenseCategory
+  examCenter      String
+  examDate        DateTime             @db.Timestamptz(3)
+  timeSlotLabel   String?
+  seatsReceived   Int
+  receivedAt      DateTime             @db.Timestamptz(3)
+  deadlineAt      DateTime?            @db.Timestamptz(3)
+  comments        String?
+  status          ExamAllocationStatus @default(ACTIVE)
+  createdAt       DateTime             @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime             @updatedAt @db.Timestamptz(3)
+  createdById     String?
+  archivedAt      DateTime?            @db.Timestamptz(3)
+
+  drivingSchool DrivingSchool   @relation(fields: [drivingSchoolId], references: [id])
+  slots         ExamSlot[]
+  candidates    ExamCandidate[]
+  documents     Document[]
+
+  @@index([drivingSchoolId, examDate])
+  @@map("exam_allocations")
+}
+
+enum ExamSlotStatus {
+  DISPONIBLE
+  RESERVEE
+  CONFIRMEE
+  CONSOMMEE
+  ANNULEE
+  PERDUE
+}
+
+model ExamSlot {
+  id             String         @id @default(cuid())
+  allocationId   String
+  sequenceNumber Int
+  status         ExamSlotStatus @default(DISPONIBLE)
+  createdAt      DateTime       @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime       @updatedAt @db.Timestamptz(3)
+
+  allocation ExamAllocation @relation(fields: [allocationId], references: [id], onDelete: Cascade)
+  candidate  ExamCandidate?
+
+  @@unique([allocationId, sequenceNumber])
+  @@map("exam_slots")
+}
+
+enum ExamCandidateStatus {
+  LISTE_ATTENTE
+  AFFECTE
+  CONFIRME
+  CONSOMME
+  ANNULE
+}
+
+enum ExamResult {
+  REUSSI
+  ECHEC
+  ABSENT
+  ANNULE
+}
+
+model ExamCandidate {
+  id                      String              @id @default(cuid())
+  allocationId            String
+  examSlotId              String?             @unique
+  studentId               String
+  waitingListPriority     Int?
+  status                  ExamCandidateStatus @default(LISTE_ATTENTE)
+  accompagnyingEmployeeId String?
+  vehicleId               String?
+  convocationReceivedAt   DateTime?           @db.Timestamptz(3)
+  convocationDetails      String?
+  result                  ExamResult?
+  failureReason           String?
+  resultRecordedAt        DateTime?           @db.Timestamptz(3)
+  createdAt               DateTime            @default(now()) @db.Timestamptz(3)
+  updatedAt               DateTime            @updatedAt @db.Timestamptz(3)
+  createdById             String?
+
+  allocation            ExamAllocation @relation(fields: [allocationId], references: [id])
+  examSlot              ExamSlot?      @relation(fields: [examSlotId], references: [id])
+  student               Student        @relation(fields: [studentId], references: [id])
+  accompagnyingEmployee Employee?      @relation("ExamAccompagnyingEmployee", fields: [accompagnyingEmployeeId], references: [id])
+  vehicle               Vehicle?       @relation(fields: [vehicleId], references: [id])
+
+  @@index([allocationId])
+  @@index([studentId])
+  @@map("exam_candidates")
+}
+
+// ============================================================================
+// SALARIÉS & RH
+// ============================================================================
+
+model EmployeeDrivingSchool {
+  id              String   @id @default(cuid())
+  employeeId      String
+  drivingSchoolId String
+  createdAt       DateTime @default(now()) @db.Timestamptz(3)
+
+  employee      Employee      @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  drivingSchool DrivingSchool @relation(fields: [drivingSchoolId], references: [id], onDelete: Cascade)
+
+  @@unique([employeeId, drivingSchoolId])
+  @@map("employee_driving_schools")
+}
+
+enum EmployeeStatus {
+  ACTIF
+  ABSENT
+  SORTI
+  ARCHIVE
+}
+
+model Employee {
+  id                     String         @id @default(cuid())
+  organizationId         String
+  primaryDrivingSchoolId String
+  userId                 String?        @unique
+  civility               Civility
+  lastName               String
+  firstName              String
+  email                  String?
+  phone                  String?
+  position               String
+  adminNotes             String?
+  status                 EmployeeStatus @default(ACTIF)
+  createdAt              DateTime       @default(now()) @db.Timestamptz(3)
+  updatedAt              DateTime       @updatedAt @db.Timestamptz(3)
+  archivedAt             DateTime?      @db.Timestamptz(3)
+
+  primaryDrivingSchool DrivingSchool           @relation("EmployeePrimarySchool", fields: [primaryDrivingSchoolId], references: [id])
+  user                 User?                   @relation(fields: [userId], references: [id])
+  additionalSchools    EmployeeDrivingSchool[]
+  qualifications       EmployeeQualification[]
+  contracts            EmploymentContract[]
+  leaveRequests        LeaveRequest[]
+  timesheets           Timesheet[]
+  payrollVariables     PayrollVariable[]
+  lessonsGiven         Lesson[]                @relation("LessonInstructor")
+  referentForStudents  Student[]               @relation("StudentReferentInstructor")
+  examAccompaniments   ExamCandidate[]         @relation("ExamAccompagnyingEmployee")
+  vehiclesUsual        Vehicle[]               @relation("VehicleUsualDriver")
+  documents            Document[]
+
+  @@index([organizationId, primaryDrivingSchoolId])
+  @@map("employees")
+}
+
+model EmployeeQualification {
+  id         String    @id @default(cuid())
+  employeeId String
+  label      String
+  obtainedAt DateTime? @db.Timestamptz(3)
+  expiresAt  DateTime? @db.Timestamptz(3)
+  notes      String?
+  createdAt  DateTime  @default(now()) @db.Timestamptz(3)
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId])
+  @@index([expiresAt])
+  @@map("employee_qualifications")
+}
+
+enum ContractType {
+  CDI
+  CDD
+  APPRENTISSAGE
+  PROFESSIONNALISATION
+  STAGE
+  INDEPENDANT
+}
+
+enum PayBasis {
+  HORAIRE
+  MENSUEL
+}
+
+enum ContractStatus {
+  ACTIF
+  TERMINE
+  AVENANT
+}
+
+model EmploymentContract {
+  id               String         @id @default(cuid())
+  employeeId       String
+  contractType     ContractType
+  startDate        DateTime       @db.Timestamptz(3)
+  endDate          DateTime?      @db.Timestamptz(3)
+  probationEndDate DateTime?      @db.Timestamptz(3)
+  weeklyHours      Decimal        @db.Decimal(5, 2)
+  payBasis         PayBasis
+  payRateCents     Int
+  status           ContractStatus @default(ACTIF)
+  notes            String?
+  createdAt        DateTime       @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime       @updatedAt @db.Timestamptz(3)
+
+  employee Employee  @relation(fields: [employeeId], references: [id])
+  document Document?
+
+  @@index([employeeId])
+  @@map("employment_contracts")
+}
+
+enum LeaveType {
+  CONGES_PAYES
+  RTT
+  MALADIE
+  SANS_SOLDE
+  FORMATION
+  AUTRE
+}
+
+enum HalfDayPeriod {
+  AUCUNE
+  MATIN
+  APRES_MIDI
+}
+
+enum LeaveStatus {
+  EN_ATTENTE
+  VALIDE
+  REFUSE
+  ANNULE
+}
+
+model LeaveRequest {
+  id               String        @id @default(cuid())
+  employeeId       String
+  drivingSchoolId  String
+  leaveType        LeaveType
+  startDate        DateTime      @db.Timestamptz(3)
+  endDate          DateTime      @db.Timestamptz(3)
+  halfDay          HalfDayPeriod @default(AUCUNE)
+  daysCount        Decimal       @db.Decimal(4, 1)
+  comment          String?
+  status           LeaveStatus   @default(EN_ATTENTE)
+  validatedById    String?
+  validatedAt      DateTime?     @db.Timestamptz(3)
+  validatorComment String?
+  createdAt        DateTime      @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime      @updatedAt @db.Timestamptz(3)
+
+  employee      Employee      @relation(fields: [employeeId], references: [id])
+  drivingSchool DrivingSchool @relation(fields: [drivingSchoolId], references: [id])
+  document      Document?
+
+  @@index([employeeId, startDate, endDate])
+  @@index([drivingSchoolId, status])
+  @@map("leave_requests")
+}
+
+enum TimesheetStatus {
+  BROUILLON
+  SOUMIS
+  VALIDE
+}
+
+model Timesheet {
+  id              String          @id @default(cuid())
+  employeeId      String
+  drivingSchoolId String
+  date            DateTime        @db.Date
+  plannedMinutes  Int             @default(0)
+  workedMinutes   Int             @default(0)
+  overtimeMinutes Int             @default(0)
+  lateMinutes     Int             @default(0)
+  notes           String?
+  status          TimesheetStatus @default(BROUILLON)
+  validatedById   String?
+  validatedAt     DateTime?       @db.Timestamptz(3)
+  createdAt       DateTime        @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime        @updatedAt @db.Timestamptz(3)
+
+  employee      Employee      @relation(fields: [employeeId], references: [id])
+  drivingSchool DrivingSchool @relation(fields: [drivingSchoolId], references: [id])
+
+  @@unique([employeeId, date])
+  @@index([drivingSchoolId, date])
+  @@map("timesheets")
+}
+
+enum PayrollPaymentStatus {
+  EN_ATTENTE
+  PAYE
+}
+
+model PayrollVariable {
+  id                        String               @id @default(cuid())
+  employeeId                String
+  drivingSchoolId           String
+  periodYear                Int
+  periodMonth               Int
+  grossSalaryCents          Int                  @default(0)
+  bonusesCents              Int                  @default(0)
+  overtimeCents             Int                  @default(0)
+  absenceDeductionCents     Int                  @default(0)
+  advancesCents             Int                  @default(0)
+  benefitsCents             Int                  @default(0)
+  expenseReimbursementCents Int                  @default(0)
+  paymentStatus             PayrollPaymentStatus @default(EN_ATTENTE)
+  paymentDate               DateTime?            @db.Timestamptz(3)
+  notes                     String?
+  createdAt                 DateTime             @default(now()) @db.Timestamptz(3)
+  updatedAt                 DateTime             @updatedAt @db.Timestamptz(3)
+
+  employee      Employee      @relation(fields: [employeeId], references: [id])
+  drivingSchool DrivingSchool @relation(fields: [drivingSchoolId], references: [id])
+  payslip       Document?
+
+  @@unique([employeeId, periodYear, periodMonth])
+  @@map("payroll_variables")
+}
+
+// ============================================================================
+// VÉHICULES
+// ============================================================================
+
+enum FuelType {
+  ESSENCE
+  DIESEL
+  ELECTRIQUE
+  HYBRIDE
+  GPL
+}
+
+enum Transmission {
+  MANUELLE
+  AUTOMATIQUE
+}
+
+enum VehicleStatus {
+  DISPONIBLE
+  EN_SERVICE
+  IMMOBILISE
+  EN_ENTRETIEN
+  HORS_SERVICE
+  CEDE
+}
+
+enum FinancingMode {
+  COMPTANT
+  CREDIT
+  LOCATION
+  LOA
+  LLD
+  LEASING
+}
+
+model Vehicle {
+  id                    String          @id @default(cuid())
+  organizationId        String
+  drivingSchoolId       String
+  plate                 String          @unique
+  make                  String
+  model                 String
+  category              LicenseCategory
+  fuelType              FuelType
+  transmission          Transmission
+  firstRegistrationDate DateTime?       @db.Timestamptz(3)
+  mileage               Int             @default(0)
+  status                VehicleStatus   @default(DISPONIBLE)
+  acquisitionDate       DateTime?       @db.Timestamptz(3)
+  financingMode         FinancingMode   @default(COMPTANT)
+  purchasePriceCents    Int?
+  supplier              String?
+  usualDriverEmployeeId String?
+  notes                 String?
+  createdAt             DateTime        @default(now()) @db.Timestamptz(3)
+  updatedAt             DateTime        @updatedAt @db.Timestamptz(3)
+  archivedAt            DateTime?       @db.Timestamptz(3)
+
+  drivingSchool       DrivingSchool @relation(fields: [drivingSchoolId], references: [id])
+  usualDriverEmployee Employee?     @relation("VehicleUsualDriver", fields: [usualDriverEmployeeId], references: [id])
+
+  contracts    VehicleContract[]
+  maintenances VehicleMaintenance[]
+  insurances   VehicleInsurance[]
+  incidents    VehicleIncident[]
+  lessons      Lesson[]
+  examUsages   ExamCandidate[]
+  documents    Document[]
+
+  @@index([organizationId, drivingSchoolId])
+  @@map("vehicles")
+}
+
+model VehicleContract {
+  id                   String        @id @default(cuid())
+  vehicleId            String
+  financingMode        FinancingMode
+  organismName         String
+  contractReference    String
+  startDate            DateTime      @db.Timestamptz(3)
+  endDate              DateTime?     @db.Timestamptz(3)
+  monthlyPaymentCents  Int?
+  firstPaymentCents    Int?
+  contractualMileage   Int?
+  mileageCap           Int?
+  residualValueCents   Int?
+  securityDepositCents Int?
+  debitDay             Int?
+  notes                String?
+  createdAt            DateTime      @default(now()) @db.Timestamptz(3)
+  updatedAt            DateTime      @updatedAt @db.Timestamptz(3)
+
+  vehicle  Vehicle   @relation(fields: [vehicleId], references: [id])
+  document Document?
+
+  @@index([vehicleId])
+  @@index([endDate])
+  @@map("vehicle_contracts")
+}
+
+enum MaintenanceType {
+  ENTRETIEN_PROGRAMME
+  VIDANGE
+  PNEUS
+  REPARATION
+  SINISTRE
+  NETTOYAGE
+  CONTROLE_TECHNIQUE
+}
+
+model VehicleMaintenance {
+  id               String          @id @default(cuid())
+  vehicleId        String
+  type             MaintenanceType
+  performedAt      DateTime        @db.Timestamptz(3)
+  mileageAtService Int
+  garage           String?
+  costCents        Int?
+  nextDueDate      DateTime?       @db.Timestamptz(3)
+  nextDueMileage   Int?
+  notes            String?
+  createdAt        DateTime        @default(now()) @db.Timestamptz(3)
+
+  vehicle  Vehicle   @relation(fields: [vehicleId], references: [id])
+  document Document?
+
+  @@index([vehicleId, performedAt])
+  @@index([nextDueDate])
+  @@map("vehicle_maintenances")
+}
+
+model VehicleInsurance {
+  id             String   @id @default(cuid())
+  vehicleId      String
+  insurer        String
+  contractNumber String
+  startDate      DateTime @db.Timestamptz(3)
+  endDate        DateTime @db.Timestamptz(3)
+  amountCents    Int?
+  notes          String?
+  createdAt      DateTime @default(now()) @db.Timestamptz(3)
+
+  vehicle  Vehicle   @relation(fields: [vehicleId], references: [id])
+  document Document?
+
+  @@index([vehicleId])
+  @@index([endDate])
+  @@map("vehicle_insurances")
+}
+
+enum IncidentStatus {
+  DECLARE
+  EN_COURS
+  CLOTURE
+}
+
+model VehicleIncident {
+  id          String         @id @default(cuid())
+  vehicleId   String
+  occurredAt  DateTime       @db.Timestamptz(3)
+  description String
+  costCents   Int?
+  status      IncidentStatus @default(DECLARE)
+  notes       String?
+  createdAt   DateTime       @default(now()) @db.Timestamptz(3)
+  createdById String?
+
+  vehicle  Vehicle   @relation(fields: [vehicleId], references: [id])
+  document Document?
+
+  @@index([vehicleId])
+  @@map("vehicle_incidents")
+}
+
+// ============================================================================
+// FINANCES
+// ============================================================================
+
+enum PaymentMethod {
+  ESPECES
+  CB
+  VIREMENT
+  CHEQUE
+  PRELEVEMENT
+  FINANCEMENT_CPF
+  AUTRE
+}
+
+enum PaymentType {
+  PAIEMENT
+  REMBOURSEMENT
+  AVOIR
+}
+
+enum PaymentStatus {
+  EN_ATTENTE
+  VALIDE
+  REJETE
+  ANNULE
+}
+
+model Payment {
+  id                 String        @id @default(cuid())
+  studentId          String
+  drivingSchoolId    String
+  type               PaymentType   @default(PAIEMENT)
+  serviceDescription String
+  amountCents        Int
+  method             PaymentMethod
+  paidAt             DateTime      @db.Timestamptz(3)
+  reference          String?
+  status             PaymentStatus @default(VALIDE)
+  notes              String?
+  correctsPaymentId  String?
+  createdAt          DateTime      @default(now()) @db.Timestamptz(3)
+  createdById        String?
+
+  student         Student       @relation(fields: [studentId], references: [id])
+  drivingSchool   DrivingSchool @relation(fields: [drivingSchoolId], references: [id])
+  correctsPayment Payment?      @relation("PaymentCorrection", fields: [correctsPaymentId], references: [id])
+  corrections     Payment[]     @relation("PaymentCorrection")
+  receiptDocument Document?
+
+  @@index([studentId])
+  @@index([drivingSchoolId, paidAt])
+  @@map("payments")
+}
+
+enum ExpenseCategory {
+  SALAIRES
+  LOYER
+  LEASING
+  CARBURANT
+  ASSURANCE
+  ENTRETIEN
+  FOURNISSEURS
+  FRAIS_ADMINISTRATIFS
+  AUTRE
+}
+
+model Expense {
+  id                String          @id @default(cuid())
+  drivingSchoolId   String
+  category          ExpenseCategory
+  amountCents       Int
+  paidAt            DateTime        @db.Timestamptz(3)
+  supplier          String?
+  paymentMethod     PaymentMethod?
+  reference         String?
+  status            PaymentStatus   @default(VALIDE)
+  relatedVehicleId  String?
+  relatedEmployeeId String?
+  notes             String?
+  createdAt         DateTime        @default(now()) @db.Timestamptz(3)
+  createdById       String?
+
+  drivingSchool   DrivingSchool @relation(fields: [drivingSchoolId], references: [id])
+  invoiceDocument Document?     @relation(fields: [documentId], references: [id])
+  documentId      String?
+
+  @@index([drivingSchoolId, paidAt])
+  @@index([category])
+  @@map("expenses")
+}
+
+// ============================================================================
+// DOCUMENTS
+// ============================================================================
+
+enum DocumentCategory {
+  PIECE_IDENTITE
+  JUSTIFICATIF_DOMICILE
+  PHOTO
+  ASSR
+  RECENSEMENT
+  JDC
+  PERMIS_EXISTANT
+  MANDAT_CONTRAT
+  CONTRAT_TRAVAIL
+  DIPLOME_QUALIFICATION
+  CONTRAT_VEHICULE
+  ASSURANCE_VEHICULE
+  FACTURE_ENTRETIEN
+  BULLETIN_PAIE
+  JUSTIFICATIF_CONGE
+  PIECE_EXAMEN
+  RECU_PAIEMENT
+  AUTRE
+}
+
+model Document {
+  id                   String           @id @default(cuid())
+  organizationId       String
+  drivingSchoolId      String?
+  category             DocumentCategory
+  fileName             String
+  mimeType             String
+  sizeBytes            Int
+  storageKey           String           @unique
+  studentId            String?
+  employeeId           String?
+  vehicleId            String?
+  examAllocationId     String?
+  employmentContractId String?          @unique
+  leaveRequestId       String?          @unique
+  vehicleContractId    String?          @unique
+  vehicleMaintenanceId String?          @unique
+  vehicleInsuranceId   String?          @unique
+  vehicleIncidentId    String?          @unique
+  paymentId            String?          @unique
+  payrollVariableId    String?          @unique
+  uploadedById         String?
+  expiresAt            DateTime?        @db.Timestamptz(3)
+  notes                String?
+  createdAt            DateTime         @default(now()) @db.Timestamptz(3)
+  archivedAt           DateTime?        @db.Timestamptz(3)
+
+  student            Student?            @relation(fields: [studentId], references: [id])
+  employee           Employee?           @relation(fields: [employeeId], references: [id])
+  vehicle            Vehicle?            @relation(fields: [vehicleId], references: [id])
+  examAllocation     ExamAllocation?     @relation(fields: [examAllocationId], references: [id])
+  employmentContract EmploymentContract? @relation(fields: [employmentContractId], references: [id])
+  leaveRequest       LeaveRequest?       @relation(fields: [leaveRequestId], references: [id])
+  vehicleContract    VehicleContract?    @relation(fields: [vehicleContractId], references: [id])
+  vehicleMaintenance VehicleMaintenance? @relation(fields: [vehicleMaintenanceId], references: [id])
+  vehicleInsurance   VehicleInsurance?   @relation(fields: [vehicleInsuranceId], references: [id])
+  vehicleIncident    VehicleIncident?    @relation(fields: [vehicleIncidentId], references: [id])
+  payment            Payment?            @relation(fields: [paymentId], references: [id])
+  payrollVariable    PayrollVariable?    @relation(fields: [payrollVariableId], references: [id])
+  drivingSchool      DrivingSchool?      @relation(fields: [drivingSchoolId], references: [id])
+  expenses           Expense[]
+
+  @@index([organizationId, drivingSchoolId])
+  @@index([studentId])
+  @@index([employeeId])
+  @@index([vehicleId])
+  @@index([expiresAt])
+  @@map("documents")
+}
+
+// ============================================================================
+// NOTIFICATIONS
+// ============================================================================
+
+enum NotificationType {
+  DOSSIER_INCOMPLET
+  DOCUMENT_EXPIRATION
+  EXAMEN_PROCHE
+  PLACE_NON_AFFECTEE
+  IMPAYE
+  CONTRAT_ECHEANCE
+  ENTRETIEN_A_PREVOIR
+  DEMANDE_CONGE
+  CONFLIT_PLANNING
+  VEHICULE_IMMOBILISE
+}
+
+enum NotificationSeverity {
+  INFO
+  ATTENTION
+  URGENT
+}
+
+model Notification {
+  id                String               @id @default(cuid())
+  organizationId    String
+  drivingSchoolId   String?
+  type              NotificationType
+  severity          NotificationSeverity @default(INFO)
+  title             String
+  message           String
+  relatedEntityType String?
+  relatedEntityId   String?
+  createdAt         DateTime             @default(now()) @db.Timestamptz(3)
+
+  organization  Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  drivingSchool DrivingSchool?          @relation(fields: [drivingSchoolId], references: [id])
+  recipients    NotificationRecipient[]
+
+  @@index([organizationId, drivingSchoolId, createdAt])
+  @@map("notifications")
+}
+
+enum NotificationStatus {
+  NON_LUE
+  LUE
+  TRAITEE
+  IGNOREE
+}
+
+model NotificationRecipient {
+  id             String             @id @default(cuid())
+  notificationId String
+  userId         String
+  status         NotificationStatus @default(NON_LUE)
+  readAt         DateTime?          @db.Timestamptz(3)
+  treatedAt      DateTime?          @db.Timestamptz(3)
+
+  notification Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+
+  @@unique([notificationId, userId])
+  @@index([userId, status])
+  @@map("notification_recipients")
+}
+
+// ============================================================================
+// TRANSFERTS ENTRE ÉTABLISSEMENTS
+// ============================================================================
+
+enum TransferEntityType {
+  STUDENT
+  EMPLOYEE
+  VEHICLE
+}
+
+model TransferHistory {
+  id                  String             @id @default(cuid())
+  entityType          TransferEntityType
+  entityId            String
+  fromDrivingSchoolId String
+  toDrivingSchoolId   String
+  transferredAt       DateTime           @default(now()) @db.Timestamptz(3)
+  transferredById     String?
+  reason              String?
+
+  fromDrivingSchool DrivingSchool @relation("TransferFromSchool", fields: [fromDrivingSchoolId], references: [id])
+  toDrivingSchool   DrivingSchool @relation("TransferToSchool", fields: [toDrivingSchoolId], references: [id])
+
+  @@index([entityType, entityId])
+  @@map("transfer_history")
+}
