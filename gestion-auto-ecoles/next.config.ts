@@ -12,6 +12,13 @@ const nextConfig: NextConfig = {
   images: {
     remotePatterns: [],
   },
+  // Les Server Actions reçoivent directement les fichiers uploadés (pièces d'identité,
+  // scans...) : taille par défaut (1 Mo) trop faible, voir MAX_DOCUMENT_SIZE_BYTES.
+  experimental: {
+    serverActions: {
+      bodySizeLimit: "10mb",
+    },
+  },
 };
 
 export default nextConfig;

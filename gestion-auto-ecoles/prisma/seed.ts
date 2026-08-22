@@ -300,7 +300,7 @@ async function main() {
     secondarySchoolIds: [republique.id],
     position: "Secrétaire",
   });
-  await upsertEmployee({
+  const employeeMoniteur1 = await upsertEmployee({
     userId: moniteur1.id,
     civility: "M",
     firstName: "Marc",
@@ -309,7 +309,7 @@ async function main() {
     primaryDrivingSchoolId: gambetta.id,
     position: "Moniteur",
   });
-  await upsertEmployee({
+  const employeeMoniteur2 = await upsertEmployee({
     userId: moniteur2.id,
     civility: "MME",
     firstName: "Sarah",
@@ -319,7 +319,7 @@ async function main() {
     secondarySchoolIds: [nogent.id],
     position: "Monitrice",
   });
-  await upsertEmployee({
+  const employeeMoniteur3 = await upsertEmployee({
     userId: moniteur3.id,
     civility: "M",
     firstName: "Thomas",
@@ -328,7 +328,7 @@ async function main() {
     primaryDrivingSchoolId: nogent.id,
     position: "Moniteur",
   });
-  await upsertEmployee({
+  const employeeMoniteur4 = await upsertEmployee({
     userId: moniteur4.id,
     civility: "MME",
     firstName: "Laëtitia",
@@ -338,7 +338,130 @@ async function main() {
     position: "Monitrice",
   });
 
+  console.log("Seed — formules de formation...");
+  async function upsertPackage(drivingSchoolId: string, name: string, licenseCategory: "B" | "A2" | "AM", includedHours: number, priceCents: number) {
+    const existing = await prisma.trainingPackage.findFirst({ where: { drivingSchoolId, name } });
+    if (existing) return existing;
+    return prisma.trainingPackage.create({ data: { drivingSchoolId, name, licenseCategory, includedHours, priceCents } });
+  }
+
+  const packagesBySchool: Record<string, Awaited<ReturnType<typeof upsertPackage>>[]> = {};
+  for (const school of [gambetta, nogent, republique]) {
+    packagesBySchool[school.id] = [
+      await upsertPackage(school.id, "Formule Permis B — 20h", "B", 20, 129000),
+      await upsertPackage(school.id, "Formule Permis B — 30h", "B", 30, 169000),
+      await upsertPackage(school.id, "Formule A2 — 20h", "A2", 20, 99000),
+    ];
+  }
+
+  console.log("Seed — élèves de démonstration...");
+  let studentSeq = 1;
+  async function upsertStudent(opts: {
+    drivingSchoolId: string;
+    civility: "M" | "MME";
+    firstName: string;
+    lastName: string;
+    phone: string;
+    email: string;
+    licenseCategory: "B" | "A2" | "AM";
+    trainingType: "TRADITIONNELLE" | "CONDUITE_ACCOMPAGNEE" | "ACCELEREE";
+    fileStatus: "INCOMPLET" | "COMPLET" | "EN_VALIDATION" | "VALIDE";
+    status: "ACTIF" | "SUSPENDU" | "TERMINE";
+    referentInstructorId?: string;
+    hoursBalance: number;
+    packageIndex: number;
+  }) {
+    const existing = await prisma.student.findFirst({ where: { drivingSchoolId: opts.drivingSchoolId, firstName: opts.firstName, lastName: opts.lastName } });
+    if (existing) return existing;
+
+    const year = new Date().getFullYear();
+    const internalNumber = `E-${year}-${String(studentSeq++).padStart(5, "0")}`;
+    const student = await prisma.student.create({
+      data: {
+        organizationId: organization!.id,
+        drivingSchoolId: opts.drivingSchoolId,
+        internalNumber,
+        civility: opts.civility,
+        firstName: opts.firstName,
+        lastName: opts.lastName,
+        phone: opts.phone,
+        email: opts.email,
+        registeredAt: new Date(Date.now() - Math.floor(Math.random() * 200) * 24 * 60 * 60 * 1000),
+        trainingType: opts.trainingType,
+        licenseCategory: opts.licenseCategory,
+        fileStatus: opts.fileStatus,
+        status: opts.status,
+        referentInstructorId: opts.referentInstructorId,
+        hoursBalance: opts.hoursBalance,
+        gdprConsentAt: new Date(),
+      },
+    });
+
+    const pkg = packagesBySchool[opts.drivingSchoolId]?.[opts.packageIndex];
+    if (pkg) {
+      await prisma.enrollment.create({
+        data: { studentId: student.id, trainingPackageId: pkg.id, drivingSchoolId: opts.drivingSchoolId, priceAtEnrollmentCents: pkg.priceCents },
+      });
+      await prisma.payment.create({
+        data: {
+          studentId: student.id,
+          drivingSchoolId: opts.drivingSchoolId,
+          type: "PAIEMENT",
+          serviceDescription: `Acompte — ${pkg.name}`,
+          amountCents: Math.round(pkg.priceCents * 0.3),
+          method: "CB",
+          paidAt: new Date(Date.now() - Math.floor(Math.random() * 60) * 24 * 60 * 60 * 1000),
+          status: "VALIDE",
+        },
+      });
+    }
+
+    return student;
+  }
+
+  await upsertStudent({
+    drivingSchoolId: gambetta.id, civility: "M", firstName: "Lucas", lastName: "Bernard", phone: "0612345601", email: "lucas.bernard@example.com",
+    licenseCategory: "B", trainingType: "TRADITIONNELLE", fileStatus: "COMPLET", status: "ACTIF", referentInstructorId: employeeMoniteur1.id, hoursBalance: 12, packageIndex: 0,
+  });
+  await upsertStudent({
+    drivingSchoolId: gambetta.id, civility: "MME", firstName: "Emma", lastName: "Petit", phone: "0612345602", email: "emma.petit@example.com",
+    licenseCategory: "B", trainingType: "CONDUITE_ACCOMPAGNEE", fileStatus: "VALIDE", status: "ACTIF", referentInstructorId: employeeMoniteur1.id, hoursBalance: 18, packageIndex: 1,
+  });
+  await upsertStudent({
+    drivingSchoolId: gambetta.id, civility: "M", firstName: "Nathan", lastName: "Roux", phone: "0612345603", email: "nathan.roux@example.com",
+    licenseCategory: "A2", trainingType: "TRADITIONNELLE", fileStatus: "INCOMPLET", status: "ACTIF", referentInstructorId: employeeMoniteur2.id, hoursBalance: 4, packageIndex: 2,
+  });
+  await upsertStudent({
+    drivingSchoolId: gambetta.id, civility: "MME", firstName: "Chloé", lastName: "Fontaine", phone: "0612345604", email: "chloe.fontaine@example.com",
+    licenseCategory: "B", trainingType: "ACCELEREE", fileStatus: "EN_VALIDATION", status: "ACTIF", referentInstructorId: employeeMoniteur2.id, hoursBalance: 8, packageIndex: 0,
+  });
+  await upsertStudent({
+    drivingSchoolId: gambetta.id, civility: "M", firstName: "Hugo", lastName: "Girard", phone: "0612345605", email: "hugo.girard@example.com",
+    licenseCategory: "B", trainingType: "TRADITIONNELLE", fileStatus: "VALIDE", status: "TERMINE", referentInstructorId: employeeMoniteur1.id, hoursBalance: 0, packageIndex: 1,
+  });
+  await upsertStudent({
+    drivingSchoolId: nogent.id, civility: "MME", firstName: "Léa", lastName: "Moreau", phone: "0612345606", email: "lea.moreau@example.com",
+    licenseCategory: "B", trainingType: "TRADITIONNELLE", fileStatus: "COMPLET", status: "ACTIF", referentInstructorId: employeeMoniteur3.id, hoursBalance: 15, packageIndex: 0,
+  });
+  await upsertStudent({
+    drivingSchoolId: nogent.id, civility: "M", firstName: "Louis", lastName: "Simon", phone: "0612345607", email: "louis.simon@example.com",
+    licenseCategory: "B", trainingType: "CONDUITE_ACCOMPAGNEE", fileStatus: "VALIDE", status: "ACTIF", referentInstructorId: employeeMoniteur3.id, hoursBalance: 22, packageIndex: 1,
+  });
+  await upsertStudent({
+    drivingSchoolId: nogent.id, civility: "MME", firstName: "Manon", lastName: "Michel", phone: "0612345608", email: "manon.michel@example.com",
+    licenseCategory: "AM", trainingType: "TRADITIONNELLE", fileStatus: "INCOMPLET", status: "SUSPENDU", hoursBalance: 2, packageIndex: 2,
+  });
+  await upsertStudent({
+    drivingSchoolId: republique.id, civility: "M", firstName: "Adam", lastName: "Lefevre", phone: "0612345609", email: "adam.lefevre@example.com",
+    licenseCategory: "B", trainingType: "TRADITIONNELLE", fileStatus: "COMPLET", status: "ACTIF", referentInstructorId: employeeMoniteur4.id, hoursBalance: 10, packageIndex: 0,
+  });
+  await upsertStudent({
+    drivingSchoolId: republique.id, civility: "MME", firstName: "Jade", lastName: "Garcia", phone: "0612345610", email: "jade.garcia@example.com",
+    licenseCategory: "B", trainingType: "ACCELEREE", fileStatus: "VALIDE", status: "ACTIF", referentInstructorId: employeeMoniteur4.id, hoursBalance: 25, packageIndex: 1,
+  });
+
   console.log("\nSeed terminé.");
+  console.log("10 élèves de démonstration créés (répartis sur les 3 auto-écoles, avec formule, acompte et statuts variés).");
   console.log(`Mot de passe commun à tous les comptes de démonstration : ${DEMO_PASSWORD}`);
   console.log(
     [

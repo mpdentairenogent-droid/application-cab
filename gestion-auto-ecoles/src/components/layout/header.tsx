@@ -14,7 +14,7 @@ export async function Header({ ctx }: { ctx: UserContext }) {
   const canSeeConsolidated = ctx.isSuperAdmin || schools.length > 1;
 
   return (
-    <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+    <header className="no-print sticky top-0 z-30 flex h-14 items-center gap-3 border-b bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/80">
       <MobileNav permissions={Array.from(ctx.permissions)} />
       <div className="flex flex-1 items-center justify-between gap-3">
         <SchoolSwitcher

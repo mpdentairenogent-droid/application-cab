@@ -4,8 +4,9 @@ Application web de gestion administrative, pédagogique, financière, sociale et
 pour un groupe de plusieurs auto-écoles françaises. Tableau de bord unique multi-établissements,
 avec séparation des données et des permissions par rôle et par établissement.
 
-> **État du projet : Phase 1 (fondations) livrée et fonctionnelle.** Voir [État d'avancement](#état-davancement--phases)
-> pour le détail de ce qui est déjà utilisable et de ce qui reste à construire.
+> **État du projet : Phases 1 (fondations) et 2 (élèves, documents, paiements) livrées et
+> fonctionnelles.** Voir [État d'avancement](#état-davancement--phases) pour le détail de ce qui
+> est déjà utilisable et de ce qui reste à construire.
 
 ## Sommaire
 
@@ -158,19 +159,26 @@ gestion-auto-ecoles/
       (auth)/connexion/        Page de connexion
       (app)/                    Zone applicative protégée (auth requise)
         tableau-de-bord/
-        eleves/ planning/ examens/ salaries/ conges/
+        eleves/                   Liste, fiche, documents, paiements (Phase 2)
+        planning/ examens/ salaries/ conges/
         vehicules/ finances/ documents/ rapports/    (accès + permissions actifs, contenu à venir)
         parametres/
           etablissements/       CRUD établissements (Phase 1)
           utilisateurs/          CRUD utilisateurs, rôles, accès établissements (Phase 1)
           journal-audit/          Consultation du journal d'audit (Phase 1)
       api/auth/[...nextauth]/   Route handler Auth.js
+      api/eleves/export/        Export CSV élèves (Phase 2)
     components/
       ui/                       Composants de base façon shadcn/ui
       layout/                   Sidebar, header, sélecteur d'établissement, garde de permission
+      students/                 Composants propres au module Élèves (Phase 2)
     server/
       auth/                     Config Auth.js, garde d'autorisation centralisée (guards.ts)
       services/                 Logique métier (1 fichier par domaine, autorisation systématique)
+        student.service.ts       Élèves : CRUD, archivage, recherche/filtres (Phase 2)
+        document.service.ts      Documents élèves : stockage S3/MinIO, URL signées (Phase 2)
+        payment.service.ts       Paiements élèves : partiels, remboursements/avoirs (Phase 2)
+      storage.ts                  Abstraction stockage S3/MinIO (Phase 2)
       db.ts                     Client Prisma (driver adapter pg), jamais importé hors server/**
       audit.ts                  Écriture du journal d'audit
       school-selection.ts       Sélecteur d'établissement (cookie + vérification d'accès)
@@ -223,7 +231,7 @@ super-administrateur qui a accès à tous les établissements par construction.
 - Autorisation vérifiée côté serveur pour chaque lecture/écriture (`requirePermission`), jamais
   uniquement par masquage d'un bouton côté interface.
 - Documents jamais servis depuis un chemin public : stockage S3/MinIO privé, accès uniquement via
-  URL signée temporaire (prévu architecturalement, activé avec le module Documents en Phase 2).
+  URL signée temporaire à validité courte (module Documents, Phase 2 — `src/server/storage.ts`).
 - Journal d'audit non modifiable depuis l'interface standard (aucune fonction de mise à jour/suppression
   n'est exposée) ; trace utilisateur, action, horodatage, établissement, anciennes/nouvelles valeurs
   utiles, adresse IP.
@@ -264,7 +272,11 @@ Recommandations pour un déploiement réel :
 
 - ✅ **Phase 1 — Fondations** : architecture, base de données (schéma complet), authentification,
   établissements, utilisateurs/rôles/permissions, mise en page principale, journal d'audit.
-- ⏳ **Phase 2** — Élèves, documents, paiements, recherche/filtres.
+- ✅ **Phase 2 — Élèves** : fiche élève complète (identité, représentant légal si mineur,
+  formation, RGPD), liste avec recherche/filtres/pagination et export CSV, documents (upload,
+  catégories, pièces manquantes signalées, URL de téléchargement signée, archivage), paiements
+  (partiels, remboursements/avoirs non destructifs, solde dû/réglé), fiche imprimable, archivage
+  et réactivation d'un dossier élève.
 - ⏳ **Phase 3** — Salariés, congés, planning/leçons, détection de conflits.
 - ⏳ **Phase 4** — Places d'examen, affectations, listes d'attente, résultats.
 - ⏳ **Phase 5** — Véhicules, contrats, entretiens, assurances, immobilisations.
@@ -276,10 +288,10 @@ toutes les phases (élèves, salariés, véhicules, examens, finances, documents
 les phases suivantes construisent les services et interfaces sur des tables déjà en place, elles
 ne redéfinissent pas le modèle de données.
 
-Les rubriques de navigation des modules non encore livrés (Élèves, Planning, Examens, Salariés,
-Congés, Véhicules, Finances, Documents, Rapports) sont déjà accessibles et protégées par
+Les rubriques de navigation des modules non encore livrés (Planning, Examens, Salariés, Congés,
+Véhicules, Finances, Documents généraux, Rapports) sont déjà accessibles et protégées par
 permission : elles affichent un état "module prévu en Phase X" plutôt qu'une page cassée ou une
-fausse donnée.
+fausse donnée. Le module Élèves (Phase 2) est le premier à sortir de cet état placeholder.
 
 ## À faire avant une mise en production réelle
 

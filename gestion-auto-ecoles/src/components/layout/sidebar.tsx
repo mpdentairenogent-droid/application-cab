@@ -17,7 +17,7 @@ export function Sidebar({ permissions }: { permissions: string[] }) {
   return (
     <aside
       className={cn(
-        "sticky top-0 hidden h-dvh shrink-0 flex-col border-r bg-card transition-[width] duration-200 md:flex",
+        "no-print sticky top-0 hidden h-dvh shrink-0 flex-col border-r bg-card transition-[width] duration-200 md:flex",
         collapsed ? "w-16" : "w-64",
       )}
     >
