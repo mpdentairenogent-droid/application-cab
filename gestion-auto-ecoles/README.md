@@ -12,6 +12,7 @@ avec séparation des données et des permissions par rôle et par établissement
 - [Stack technique](#stack-technique)
 - [Démarrage rapide](#démarrage-rapide)
 - [Comptes de démonstration](#comptes-de-démonstration)
+- [Déploiement de démonstration](#déploiement-de-démonstration)
 - [Scripts disponibles](#scripts-disponibles)
 - [Architecture du projet](#architecture-du-projet)
 - [Rôles et permissions](#rôles-et-permissions)
@@ -102,6 +103,27 @@ Créés par `npm run db:seed`, **uniquement en local** (le script refuse de s'ex
 | `moniteur4@demo.local`   | Monitrice             | République                           |
 
 Les noms d'établissements et de personnes sont des données fictives de démonstration.
+
+## Déploiement de démonstration
+
+Pour tester l'application sans environnement de développement local (ex. depuis un mobile), elle
+peut être déployée sur Vercel avec une base PostgreSQL managée :
+
+1. Importer le dépôt GitHub dans Vercel, en réglant le **répertoire racine du projet** sur
+   `gestion-auto-ecoles`.
+2. Créer une base PostgreSQL managée (ex. via l'onglet Storage de Vercel) et définir la variable
+   d'environnement `DATABASE_URL` du projet avec la chaîne de connexion obtenue.
+3. Définir `AUTH_SECRET` (valeur aléatoire forte) et `ALLOW_DEMO_SEED_IN_PRODUCTION=true`.
+4. Déployer : le script `vercel-build` (voir `package.json`) applique automatiquement les
+   migrations et charge les données de démonstration à chaque déploiement.
+
+**⚠️ Un déploiement ainsi configuré est un environnement de démonstration/test, pas une mise en
+production réelle** : il contient des comptes à mot de passe connu (voir
+[Comptes de démonstration](#comptes-de-démonstration)) et son URL, bien que non répertoriée
+publiquement, n'est pas privée. Ne jamais y saisir de vraies données personnelles, et retirer
+`ALLOW_DEMO_SEED_IN_PRODUCTION` avant tout usage réel — voir
+[À faire avant une mise en production réelle](#à-faire-avant-une-mise-en-production-réelle).
+Détails opérationnels du déploiement en cours : `docs/CONTEXTE_PROJET.md`.
 
 ## Scripts disponibles
 
@@ -261,6 +283,9 @@ fausse donnée.
 
 ## À faire avant une mise en production réelle
 
+- Si un déploiement de démonstration (voir plus haut) a été utilisé : retirer
+  `ALLOW_DEMO_SEED_IN_PRODUCTION`, changer tous les mots de passe des comptes créés pendant la
+  démonstration (ou les archiver), et repartir d'une base propre avant tout usage réel.
 - Réinitialisation de mot de passe en libre-service (« mot de passe oublié ») et changement de
   mot de passe depuis son propre compte — l'admin peut aujourd'hui définir un mot de passe initial,
   mais aucun flux self-service n'est encore construit.

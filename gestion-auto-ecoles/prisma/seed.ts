@@ -1,11 +1,17 @@
 /**
  * Script de données de démonstration.
- * Usage : npm run db:seed (voir package.json) — ne doit jamais tourner en production.
+ * Usage : npm run db:seed (voir package.json).
  *
  * Phase 1 : organisation, 3 auto-écoles, catalogue de permissions, rôles, comptes de
  * démonstration pour chaque rôle. Les phases suivantes enrichiront ce script (élèves,
  * véhicules, planning, examens, paiements, congés...) au fur et à mesure que chaque
  * module est réellement implémenté — voir docs/CONTEXTE_PROJET.md.
+ *
+ * Bloqué par défaut en production : ce script ne doit normalement jamais tourner sur un
+ * vrai déploiement destiné à un usage réel. Exception explicite et volontaire :
+ * ALLOW_DEMO_SEED_IN_PRODUCTION=true, réservée à un déploiement de démonstration/test
+ * (voir "Déploiement de démonstration" dans le README) — jamais à activer sur un
+ * environnement contenant de vraies données.
  */
 import "dotenv/config";
 import { PrismaClient, GlobalRoleKey } from "@prisma/client";
@@ -13,8 +19,10 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import bcrypt from "bcryptjs";
 import { PERMISSIONS, DEFAULT_ROLE_PERMISSIONS, ROLE_LABELS } from "../src/lib/permissions";
 
-if (process.env.NODE_ENV === "production") {
-  console.error("Le script de seed ne doit jamais être exécuté en production.");
+if (process.env.NODE_ENV === "production" && process.env.ALLOW_DEMO_SEED_IN_PRODUCTION !== "true") {
+  console.error(
+    "Seed ignoré : environnement de production sans ALLOW_DEMO_SEED_IN_PRODUCTION=true (voir prisma/seed.ts).",
+  );
   process.exit(1);
 }
 
